@@ -1,7 +1,7 @@
 <template>
   <transition name="modal-fade">
     <div v-if="modelValue" class="fixed inset-0 z-40 flex items-center justify-center px-4 py-8">
-      <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" @click="close"></div>
+      <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm margin-top-0" @click="close"></div>
       <div class="relative z-10 w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-2xl" role="dialog" aria-modal="true">
         <header class="flex items-start justify-between gap-4 border-b border-slate-100 bg-slate-50 px-6 py-4">
           <div>

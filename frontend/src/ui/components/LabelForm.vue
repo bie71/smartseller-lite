@@ -82,7 +82,7 @@
           </div>
           <div v-if="form.isCOD">
             <label class="block text-sm font-medium text-slate-700 mb-1">Jumlah COD (IDR)</label>
-            <input v-model.number="form.codAmount" type="number" class="input w-full" />
+            <input v-model="codAmountFormatted" type="text" inputmode="numeric" class="input w-full" />
           </div>
         </div>
 
@@ -114,8 +114,10 @@
             v-for="label in queue"
             :key="label.id"
             :label="label"
+            :app-settings="appSettings"
             @remove="removeLabel"
             @edit="startEdit"
+            @print="printSingleLabel"
           />
         </div>
         <div v-else class="text-center py-16 px-6 border-2 border-dashed border-slate-300 rounded-lg">
@@ -128,9 +130,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref, watch, computed, onMounted } from 'vue';
 import type { LabelData } from '../../modules/label';
-import { generateLabelsPdf } from '../../modules/label';
+import { generateLabelsPdf, generateSingleLabelPdf } from '../../modules/label';
+import { getSettings, type AppSettings } from '../../modules/settings';
 import LabelPreview from './LabelPreview.vue';
 
 const props = defineProps<{
@@ -142,10 +145,19 @@ const queue = ref<LabelData[]>([]);
 const isPrinting = ref(false);
 const editingLabelId = ref<string | null>(null);
 const isEditing = ref(false);
+const appSettings = ref<AppSettings | null>(null);
+
+onMounted(async () => {
+  try {
+    appSettings.value = await getSettings();
+  } catch (e) {
+    console.error('Failed to load app settings', e);
+  }
+});
 
 const createFreshForm = (): LabelData => ({
   id: ``, // ID will be set on add
-  senderName: 'Toko SmartSeller',
+  senderName: appSettings.value?.brandName || 'Toko SmartSeller',
   senderPhone: '081234567890',
   recipientName: '',
   recipientPhone: '',
@@ -161,12 +173,30 @@ const createFreshForm = (): LabelData => ({
 
 const form = ref<LabelData>(createFreshForm());
 
+const codAmountFormatted = computed({
+  get() {
+    if (form.value.codAmount === undefined || form.value.codAmount === 0) return '';
+    return new Intl.NumberFormat('id-ID').format(form.value.codAmount);
+  },
+  set(value) {
+    const num = parseInt(value.replace(/[^0-9]/g, ''), 10);
+    form.value.codAmount = isNaN(num) ? 0 : num;
+  }
+});
+
 watch(() => props.autoData, (v) => {
   if (v) {
     Object.assign(form.value, v);
     tab.value = 'auto';
   }
 }, { immediate: true, deep: true });
+
+// Update sender name if settings load after form is created
+watch(appSettings, (settings) => {
+  if (settings && !form.value.senderName) {
+    form.value.senderName = settings.brandName;
+  }
+});
 
 const handleSubmit = () => {
   if (!form.value.recipientName || !form.value.courier) {
@@ -212,16 +242,25 @@ function resetForm() {
   isEditing.value = false;
 }
 
+async function printSingleLabel(id: string) {
+  const label = queue.value.find(l => l.id === id);
+  if (!label) return;
+  try {
+    const blob = await generateSingleLabelPdf(label, appSettings.value);
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+  } catch (e: any) {
+    alert(e?.message || 'Gagal membuat PDF');
+  }
+}
+
 async function printQueuePdf() {
   if (!queue.value.length) return alert('Antrian kosong.');
   isPrinting.value = true;
   try {
-    const blob = await generateLabelsPdf(queue.value);
+    const blob = await generateLabelsPdf(queue.value, appSettings.value);
     const url = URL.createObjectURL(blob);
-    // Open in new tab
     window.open(url, '_blank');
-    // We don't revoke the object URL immediately to allow the new tab to load it.
-    // This is a memory leak, but acceptable for this use case.
   } catch (e:any) {
     alert(e?.message || 'Gagal membuat PDF');
   } finally {

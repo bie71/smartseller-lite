@@ -506,7 +506,7 @@
   
     <!-- Panel Cetak Label -->
     <transition name="fade">
-      <div v-if="showLabelPanel" class="fixed inset-0 z-50 bg-black/40 flex justify-center items-start p-4 overflow-y-auto h-screen w-screen">
+      <div v-if="showLabelPanel" class="fixed inset-0 -mt-5 z-50 bg-black/40 flex justify-center items-start p-4 overflow-y-auto h-screen w-screen">
         <div class="bg-white w-full max-w-7xl rounded-2xl shadow-lg my-auto flex flex-col max-h-[90vh]">
           <div class="flex items-center justify-between p-4 border-b flex-shrink-0">
             <div class="flex items-center gap-2">
@@ -1448,8 +1448,8 @@ function openLabelApp(order: Order) {
 const showLabelPanel = ref(false);
 
 function buildAutoLabelData(order?: Order | null) {
-  const buyer = customers.value.find(c => c.id === (order?.buyerId || form.buyer?.id));
-  const recipient = customers.value.find(c => c.id === (order?.recipientId || form.recipient?.id));
+  const buyer = customers.value.find(c => c.id === (order?.buyerId || form?.buyerId));
+  const recipient = customers.value.find(c => c.id === (order?.recipientId || form?.recipientId));
   return {
     senderName: buyer?.name || '',
     senderPhone: buyer?.phone || '',
