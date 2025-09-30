@@ -1,0 +1,5 @@
+{
+  "name": "SmartSeller Label Printer",
+  "description": "An enhanced UI for designing and printing shipping labels for SmartSeller orders. Input order details, preview professional-looking labels, and generate a multi-page PDF for printing.",
+  "requestFramePermissions": []
+}

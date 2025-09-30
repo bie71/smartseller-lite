@@ -1,0 +1,29 @@
+{
+  "name": "smartseller-lite-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && node ./scripts/postbuild.cjs",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@heroicons/vue": "^2.1.5",
+    "html2canvas": "^1.4.1",
+    "jsbarcode": "^3.11.6",
+    "jspdf": "^3.0.3",
+    "pinia": "^2.1.7",
+    "vue": "^3.4.21"
+  },
+  "devDependencies": {
+    "@tailwindcss/forms": "^0.5.7",
+    "@types/node": "^20.11.19",
+    "@vitejs/plugin-vue": "^5.0.4",
+    "autoprefixer": "^10.4.17",
+    "postcss": "^8.4.35",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5.3.3",
+    "vite": "^6.0.0"
+  }
+}

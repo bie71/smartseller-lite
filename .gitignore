@@ -1,0 +1,44 @@
+# OS & editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Go
+bin/
+*.exe
+*.test
+*.out
+coverage/
+
+# Wails/Build artifacts
+build/
+frontend/dist/*
+!frontend/dist/.gitkeep
+
+# Node
+node_modules/
+frontend/node_modules/
+
+# Env/Secrets
+.env
+.env.*
+!.env.example
+frontend/.env
+**/*.local.env
+
+# SQLite database (runtime data)
+appdata.db
+internal/db/*.db
+
+# Logs & temps
+logs/
+*.log
+tmp/
+*.tmp
+*.bak
+*.db
+*.db-shm
+*.db-wal
+*.wails
