@@ -487,7 +487,8 @@ watch(courierModalOpen, (open) => {
 
 async function loadCouriers() {
   try {
-    couriers.value = await listCouriers();
+    const response = await listCouriers({ page: 1, pageSize: 500 });
+    couriers.value = response.items;
   } catch (error) {
     console.error(error);
     toast.push('Gagal memuat daftar ekspedisi.', 'error');

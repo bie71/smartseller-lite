@@ -386,7 +386,13 @@
           Produk terlaris: {{ orderInsights.topProduct }}
         </div>
       </div>
-      <div v-if="!orders.length" class="text-sm text-slate-500">Belum ada order.</div>
+      <div
+        v-if="ordersError"
+        class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600"
+      >
+        {{ ordersError }}
+      </div>
+      <div v-else-if="!orders.length" class="text-sm text-slate-500">Belum ada order.</div>
       <div v-else-if="orderTotal === 0" class="text-sm text-slate-500">Tidak ada order yang cocok dengan pencarian.</div>
       <template v-else>
         <div v-for="order in orders" :key="order.id" class="border-t border-slate-200 p-4 space-y-3 first:border-t-0">
@@ -583,6 +589,7 @@ const customers = ref<Customer[]>([]);
 const products = ref<Product[]>([]);
 const orders = ref<Order[]>([]);
 const ordersLoading = ref(false);
+const ordersError = ref('');
 const orderTotal = ref(0);
 const orderSummaryMeta = ref<OrderListSummary | null>(null);
 const orderAvailableCouriers = ref<string[]>([]);
@@ -1202,6 +1209,7 @@ async function loadOrders() {
     orderTotal.value = response.total;
     orderSummaryMeta.value = response.summary;
     orderAvailableCouriers.value = response.couriers;
+    ordersError.value = '';
   } catch (error) {
     console.error(error);
     if (requestId === orderFetchId) {
@@ -1209,6 +1217,8 @@ async function loadOrders() {
       orderTotal.value = 0;
       orderSummaryMeta.value = null;
       orderAvailableCouriers.value = [];
+      ordersError.value =
+        error instanceof Error && error.message ? error.message : 'Gagal memuat histori order.';
       toast.push('Gagal memuat histori order.', 'error');
     }
   } finally {

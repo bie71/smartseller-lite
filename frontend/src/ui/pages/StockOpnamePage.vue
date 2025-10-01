@@ -561,8 +561,8 @@ function openOpnameDetail(opname: StockOpname) {
 
 async function loadProducts() {
   try {
-    const fetched = await listProducts();
-    products.value = fetched;
+    const fetched = await listProducts({ page: 1, pageSize: 500 });
+    products.value = fetched.items;
   } catch (error) {
     console.error(error);
   }
