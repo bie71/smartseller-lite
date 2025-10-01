@@ -18,8 +18,8 @@ func NewAPI(core *Core) *API {
 	return &API{core: core}
 }
 
-func (a *API) ListProducts(ctx context.Context) ([]domain.Product, error) {
-	return a.core.ProductService.List(ctx)
+func (a *API) ListProducts(ctx context.Context, opts service.ProductListOptions) (service.ProductListResult, error) {
+    return a.core.ProductService.ListPaged(ctx, opts)
 }
 
 func (a *API) SaveProduct(ctx context.Context, payload domain.Product) (*domain.Product, error) {
@@ -37,8 +37,8 @@ func (a *API) AdjustStock(ctx context.Context, productID string, delta int, reas
 	return a.core.ProductService.AdjustStock(ctx, productID, delta, reason)
 }
 
-func (a *API) ListCustomers(ctx context.Context) ([]domain.Customer, error) {
-	return a.core.CustomerService.List(ctx)
+func (a *API) ListCustomers(ctx context.Context, opts service.CustomerListOptions) (service.CustomerListResult, error) {
+    return a.core.CustomerService.ListPaged(ctx, opts)
 }
 
 func (a *API) SaveCustomer(ctx context.Context, payload domain.Customer) (*domain.Customer, error) {
@@ -48,8 +48,8 @@ func (a *API) SaveCustomer(ctx context.Context, payload domain.Customer) (*domai
 	return a.core.CustomerService.Update(ctx, payload)
 }
 
-func (a *API) ListOrders(ctx context.Context, limit int) ([]domain.Order, error) {
-	return a.core.OrderService.List(ctx, limit)
+func (a *API) ListOrders(ctx context.Context, opts service.OrderListOptions) (service.OrderListResult, error) {
+    return a.core.OrderService.ListPaged(ctx, opts)
 }
 
 func (a *API) CreateOrder(ctx context.Context, payload service.CreateOrderInput) (*domain.Order, error) {
@@ -79,8 +79,8 @@ func (a *API) UpdateSettings(ctx context.Context, payload domain.AppSettings) (*
 	return a.core.SettingsService.Update(ctx, payload)
 }
 
-func (a *API) ListCouriers(ctx context.Context) ([]domain.Courier, error) {
-	return a.core.CourierService.List(ctx)
+func (a *API) ListCouriers(ctx context.Context, opts service.CourierListOptions) (service.CourierListResult, error) {
+    return a.core.CourierService.ListPaged(ctx, opts)
 }
 
 func (a *API) SaveCourier(ctx context.Context, payload domain.Courier) (*domain.Courier, error) {

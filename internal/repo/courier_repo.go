@@ -20,6 +20,96 @@ func NewCourierRepository(db *sql.DB) *CourierRepository {
 	return &CourierRepository{db: db}
 }
 
+type CourierListOptions struct {
+	Query    string
+	Page     int
+	PageSize int
+}
+
+type CourierListResult struct {
+	Items    []domain.Courier `json:"items"`
+	Total    int              `json:"total"`
+	Page     int              `json:"page"`
+	PageSize int              `json:"pageSize"`
+}
+
+func (r *CourierRepository) ListPaged(ctx context.Context, opts CourierListOptions) (CourierListResult, error) {
+	const maxPageSize = 100
+
+	page := opts.Page
+	if page <= 0 {
+		page = 1
+	}
+	pageSize := opts.PageSize
+	if pageSize < 0 {
+		pageSize = 0
+	}
+	if pageSize > maxPageSize {
+		pageSize = maxPageSize
+	}
+
+	whereParts := make([]string, 0)
+	args := make([]any, 0)
+
+	query := strings.TrimSpace(strings.ToLower(opts.Query))
+	if query != "" {
+		like := "%" + query + "%"
+		whereParts = append(whereParts, "(LOWER(code) LIKE ? OR LOWER(IFNULL(name,'')) LIKE ? OR LOWER(IFNULL(services,'')) LIKE ? OR LOWER(IFNULL(contact,'')) LIKE ? OR LOWER(IFNULL(notes,'')) LIKE ?)")
+		args = append(args, like, like, like, like, like)
+	}
+
+	whereClause := ""
+	if len(whereParts) > 0 {
+		whereClause = "WHERE " + strings.Join(whereParts, " AND ")
+	}
+
+	limitClause := ""
+	listArgs := append([]any{}, args...)
+	if pageSize > 0 {
+		offset := (page - 1) * pageSize
+		limitClause = " LIMIT ? OFFSET ?"
+		listArgs = append(listArgs, pageSize, offset)
+	}
+
+	stmt := "SELECT id, code, name, services, tracking_url, contact, notes, logo_path, logo_hash, logo_width, logo_height, logo_size_bytes, logo_mime, created_at, updated_at FROM couriers " + whereClause + " ORDER BY name" + limitClause + ";"
+	rows, err := r.db.QueryContext(ctx, stmt, listArgs...)
+	if err != nil {
+		return CourierListResult{}, fmt.Errorf("list couriers: %w", err)
+	}
+	defer rows.Close()
+
+	items := make([]domain.Courier, 0)
+	for rows.Next() {
+		var c domain.Courier
+		var created, updated string
+		if err := rows.Scan(&c.ID, &c.Code, &c.Name, &c.Services, &c.TrackingURL, &c.Contact, &c.Notes, &c.LogoPath, &c.LogoHash, &c.LogoWidth, &c.LogoHeight, &c.LogoSizeBytes, &c.LogoMime, &created, &updated); err != nil {
+			return CourierListResult{}, err
+		}
+		c.CreatedAt, _ = time.Parse(time.RFC3339, created)
+		c.UpdatedAt, _ = time.Parse(time.RFC3339, updated)
+		items = append(items, c)
+	}
+
+	countStmt := "SELECT COUNT(*) FROM couriers " + whereClause + ";"
+	var total int
+	if err := r.db.QueryRowContext(ctx, countStmt, args...).Scan(&total); err != nil {
+		return CourierListResult{}, fmt.Errorf("count couriers: %w", err)
+	}
+
+	result := CourierListResult{
+		Items:    items,
+		Total:    total,
+		Page:     page,
+		PageSize: pageSize,
+	}
+	if pageSize <= 0 {
+		result.Page = 1
+		result.PageSize = len(items)
+	}
+
+	return result, nil
+}
+
 func (r *CourierRepository) EnsureDefaults(ctx context.Context, defaults []domain.Courier) error {
 	rows, err := r.db.QueryContext(ctx, `SELECT code FROM couriers;`)
 	if err != nil {
@@ -62,28 +152,11 @@ func (r *CourierRepository) EnsureDefaults(ctx context.Context, defaults []domai
 }
 
 func (r *CourierRepository) List(ctx context.Context) ([]domain.Courier, error) {
-	const stmt = `SELECT id, code, name, services, tracking_url, contact, notes, logo_path, logo_hash, logo_width, logo_height, logo_size_bytes, logo_mime, created_at, updated_at FROM couriers ORDER BY name;`
-	rows, err := r.db.QueryContext(ctx, stmt)
+	result, err := r.ListPaged(ctx, CourierListOptions{Page: 1, PageSize: 0})
 	if err != nil {
-		return nil, fmt.Errorf("list couriers: %w", err)
-	}
-	defer rows.Close()
-
-	var items []domain.Courier
-	for rows.Next() {
-		var c domain.Courier
-		var created, updated string
-		if err := rows.Scan(&c.ID, &c.Code, &c.Name, &c.Services, &c.TrackingURL, &c.Contact, &c.Notes, &c.LogoPath, &c.LogoHash, &c.LogoWidth, &c.LogoHeight, &c.LogoSizeBytes, &c.LogoMime, &created, &updated); err != nil {
-			return nil, err
-		}
-		c.CreatedAt, _ = time.Parse(time.RFC3339, created)
-		c.UpdatedAt, _ = time.Parse(time.RFC3339, updated)
-		items = append(items, c)
-	}
-	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	return items, nil
+	return result.Items, nil
 }
 
 func (r *CourierRepository) Get(ctx context.Context, id string) (*domain.Courier, error) {

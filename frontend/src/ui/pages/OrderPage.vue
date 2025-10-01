@@ -364,7 +364,7 @@
           {{ chip }}
         </span>
       </div>
-      <div v-if="filteredOrders.length" class="flex flex-wrap gap-2 text-xs text-slate-600 sm:text-sm">
+      <div v-if="orderTotal > 0" class="flex flex-wrap gap-2 text-xs text-slate-600 sm:text-sm">
         <div class="stat-chip">
           <ClipboardDocumentListIcon class="h-4 w-4 text-primary" />
           {{ orderInsights.count }} order
@@ -387,9 +387,9 @@
         </div>
       </div>
       <div v-if="!orders.length" class="text-sm text-slate-500">Belum ada order.</div>
-      <div v-else-if="!filteredOrders.length" class="text-sm text-slate-500">Tidak ada order yang cocok dengan pencarian.</div>
+      <div v-else-if="orderTotal === 0" class="text-sm text-slate-500">Tidak ada order yang cocok dengan pencarian.</div>
       <template v-else>
-        <div v-for="order in paginatedOrders" :key="order.id" class="border-t border-slate-200 p-4 space-y-3 first:border-t-0">
+        <div v-for="order in orders" :key="order.id" class="border-t border-slate-200 p-4 space-y-3 first:border-t-0">
           <div class="space-y-1">
             <h4 class="font-semibold">{{ order.code }}</h4>
             <p class="text-xs text-slate-500">
@@ -444,7 +444,7 @@
           </div>
         </div>
         <footer
-          v-if="filteredOrders.length > orderPageSize"
+          v-if="orderTotal > orderPageSize"
           class="flex flex-col gap-3 border-t border-slate-100 p-4 text-sm text-slate-500 md:flex-row md:items-center md:justify-between"
         >
           <span>{{ orderRangeLabel }}</span>
@@ -549,7 +549,7 @@ import { listProducts } from '../../modules/product';
 import type { Product } from '../../modules/product';
 import { listCustomers, saveCustomer } from '../../modules/customer';
 import type { Customer, CustomerType } from '../../modules/customer';
-import { createOrder, deleteOrder, downloadLabel, listOrders, type Order, type UiOrderItem } from '../../modules/order';
+import { createOrder, deleteOrder, downloadLabel, listOrders, type Order, type OrderListResponse, type OrderListSummary, type UiOrderItem } from '../../modules/order';
 import { generateSingleLabelPdf, type LabelData } from '../../modules/label';
 import { fetchOrdersCsv } from '../../modules/reports';
 import { getSettings, listCouriers, type AppSettings, type Courier } from '../../modules/settings';
@@ -582,6 +582,10 @@ type OrderFormItem = UiOrderItem & { unitPriceDisplay: string; discountDisplay: 
 const customers = ref<Customer[]>([]);
 const products = ref<Product[]>([]);
 const orders = ref<Order[]>([]);
+const ordersLoading = ref(false);
+const orderTotal = ref(0);
+const orderSummaryMeta = ref<OrderListSummary | null>(null);
+const orderAvailableCouriers = ref<string[]>([]);
 const couriers = ref<Courier[]>([]);
 const orderSearch = ref('');
 const orderDateStart = ref('');
@@ -615,6 +619,9 @@ const orderHistoryActionPrintClasses =
   'inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-60';
 const orderHistoryActionDeleteClasses =
   'inline-flex items-center gap-1 rounded-lg bg-rose-600 px-3 py-1 text-xs font-semibold text-white shadow-sm transition hover:bg-rose-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-rose-500';
+
+let orderFetchId = 0;
+let orderFetchTimer: ReturnType<typeof setTimeout> | null = null;
 
 const contactModeButtonClasses =
   'inline-flex items-center justify-center rounded-full px-3 py-1 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60';
@@ -809,75 +816,37 @@ const selectedCourier = computed(() =>
 );
 
 const courierFilterOptions = computed(() => {
-  const seen = new Set<string>();
   const options: Array<{ value: string; label: string }> = [{ value: 'all', label: 'Semua ekspedisi' }];
-  orders.value.forEach((order) => {
-    const value = order.shipment.courier || 'Lainnya';
-    if (!seen.has(value)) {
-      seen.add(value);
-      options.push({ value, label: value });
+  const seen = new Set<string>();
+  orderAvailableCouriers.value.forEach((raw) => {
+    const key = raw ?? '';
+    if (seen.has(key)) {
+      return;
     }
-  });
-  courierOptions.value.forEach((option) => {
-    const value = option.value;
-    if (!seen.has(value)) {
-      seen.add(value);
-      options.push({ value, label: option.label });
-    }
+    seen.add(key);
+    const match = couriers.value.find((item) => {
+      const candidate = item.code || item.name;
+      return candidate === key || (key === '' && candidate === '');
+    });
+    const label = match
+      ? `${match.code || match.name}${match.code && match.name ? ` · ${match.name}` : ''}`
+      : key !== ''
+        ? key
+        : 'Lainnya';
+    options.push({ value: key, label });
   });
   return options;
 });
 
-const filteredOrders = computed(() => {
-  let list = orders.value;
-  if (orderCourierFilter.value !== 'all') {
-    list = list.filter((order) => (order.shipment.courier || 'Lainnya') === orderCourierFilter.value);
-  }
-  if (orderDateStart.value) {
-    const start = new Date(`${orderDateStart.value}T00:00:00`);
-    list = list.filter((order) => new Date(order.createdAt) >= start);
-  }
-  if (orderDateEnd.value) {
-    const end = new Date(`${orderDateEnd.value}T23:59:59`);
-    list = list.filter((order) => new Date(order.createdAt) <= end);
-  }
-  const query = orderSearch.value.trim().toLowerCase();
-  if (!query) {
-    return list;
-  }
-  return list.filter((order) => {
-    const candidateFields = [
-      order.code,
-      order.shipment.courier,
-      order.shipment.serviceLevel,
-      order.shipment.trackingCode,
-      order.notes,
-      customerMap.value.get(order.buyerId)?.name,
-      customerMap.value.get(order.recipientId)?.name
-    ];
-    const productMatches = order.items.some((item) => productName(item.productId).toLowerCase().includes(query));
-    return (
-      candidateFields
-        .filter(Boolean)
-        .some((field) => (field as string).toLowerCase().includes(query)) || productMatches
-    );
-  });
-});
-
-const totalOrderPages = computed(() => (filteredOrders.value.length > 0 ? Math.ceil(filteredOrders.value.length / orderPageSize) : 1));
-
-const paginatedOrders = computed(() => {
-    return filteredOrders.value.slice((orderPage.value - 1) * orderPageSize, orderPage.value * orderPageSize);
-});
+const totalOrderPages = computed(() => (orderTotal.value > 0 ? Math.ceil(orderTotal.value / orderPageSize) : 1));
 
 const orderRangeLabel = computed(() => {
-  if (!filteredOrders.value.length) {
+  if (orderTotal.value === 0) {
     return 'Menampilkan 0 dari 0 order';
   }
-  const start = (orderPage.value - 1) * orderPageSize;
-  const from = start + 1;
-  const to = Math.min(start + orderPageSize, filteredOrders.value.length);
-  return `Menampilkan ${from}-${to} dari ${filteredOrders.value.length} order`;
+  const start = (orderPage.value - 1) * orderPageSize + 1;
+  const end = start + orders.value.length - 1;
+  return `Menampilkan ${start}-${end} dari ${orderTotal.value} order`;
 });
 
 const hasOrderFilters = computed(
@@ -903,36 +872,26 @@ const orderFilterChips = computed(() => {
   if (orderCourierFilter.value !== 'all') {
     const label =
       courierFilterOptions.value.find((option) => option.value === orderCourierFilter.value)?.label ||
-      orderCourierFilter.value;
+      (orderCourierFilter.value === '' ? 'Lainnya' : orderCourierFilter.value);
     chips.push(`Ekspedisi: ${label}`);
   }
   return chips;
 });
 
 const orderInsights = computed(() => {
-  const list = filteredOrders.value;
-  if (!list.length) {
+  const summary = orderSummaryMeta.value;
+  if (!summary || summary.count <= 0) {
     return { count: 0, revenue: 0, profit: 0, topCourier: '-', topProduct: '-' };
   }
-  const revenue = list.reduce((sum, order) => sum + order.total, 0);
-  const profit = list.reduce((sum, order) => sum + order.profit, 0);
-  const courierCounter = new Map<string, number>();
-  const productCounter = new Map<string, number>();
-  list.forEach((order) => {
-    const courierName = order.shipment.courier || 'Lainnya';
-    courierCounter.set(courierName, (courierCounter.get(courierName) || 0) + 1);
-    order.items.forEach((item) => {
-      productCounter.set(item.productId, (productCounter.get(item.productId) || 0) + item.quantity);
-    });
-  });
-  const topCourierEntry = Array.from(courierCounter.entries()).sort((a, b) => b[1] - a[1])[0];
-  const topProductEntry = Array.from(productCounter.entries()).sort((a, b) => b[1] - a[1])[0];
+  const courierLabel = summary.topCourierHits > 0 ? `${summary.topCourier || 'Lainnya'} (${summary.topCourierHits})` : '-';
+  const productLabelBase = summary.topProductName || (summary.topProductId ? productName(summary.topProductId) : '');
+  const productLabel = summary.topProductQty > 0 ? `${productLabelBase || 'Produk'} (${summary.topProductQty})` : '-';
   return {
-    count: list.length,
-    revenue,
-    profit,
-    topCourier: topCourierEntry ? `${topCourierEntry[0]} (${topCourierEntry[1]})` : '-',
-    topProduct: topProductEntry ? `${productName(topProductEntry[0])} (${topProductEntry[1]})` : '-'
+    count: summary.count,
+    revenue: summary.revenue,
+    profit: summary.profit,
+    topCourier: courierLabel,
+    topProduct: productLabel
   };
 });
 
@@ -1196,14 +1155,19 @@ function openOrderDetail(order: Order) {
 
 async function loadInitial() {
   try {
-    const [cust, prod, logistic] = await Promise.all([listCustomers(), listProducts(), listCouriers()]);
-    customers.value = cust;
-    products.value = prod;
-    couriers.value = logistic;
-    if (!form.courier && logistic.length) {
-      form.courier = logistic[0].code || logistic[0].name;
+    const [customerRes, productRes, courierRes] = await Promise.all([
+      listCustomers({ page: 1, pageSize: 500 }),
+      listProducts({ page: 1, pageSize: 500 }),
+      listCouriers({ page: 1, pageSize: 200 })
+    ]);
+    customers.value = customerRes.items;
+    products.value = productRes.items;
+    couriers.value = courierRes.items;
+    if (!form.courier && couriers.value.length) {
+      form.courier = couriers.value[0].code || couriers.value[0].name;
     }
     if (!form.items.length) addItem();
+    await loadOrders();
   } catch (error) {
     console.error(error);
     toast.push('Gagal memuat data awal order.', 'error');
@@ -1211,12 +1175,57 @@ async function loadInitial() {
 }
 
 async function loadOrders() {
+  const requestId = ++orderFetchId;
+  ordersLoading.value = true;
+  ordersError.value = '';
   try {
-    orders.value = await listOrders();
+    const response: OrderListResponse = await listOrders({
+      page: orderPage.value,
+      pageSize: orderPageSize,
+      query: orderSearch.value.trim() || undefined,
+      courier: orderCourierFilter.value !== 'all' ? orderCourierFilter.value : undefined,
+      dateStart: orderDateStart.value || undefined,
+      dateEnd: orderDateEnd.value || undefined
+    });
+
+    if (requestId !== orderFetchId) {
+      return;
+    }
+
+    const totalPages = Math.max(1, Math.ceil(response.total / orderPageSize));
+    if (orderPage.value > totalPages) {
+      orderPage.value = totalPages;
+      return;
+    }
+
+    orders.value = response.items;
+    orderTotal.value = response.total;
+    orderSummaryMeta.value = response.summary;
+    orderAvailableCouriers.value = response.couriers;
   } catch (error) {
     console.error(error);
-    toast.push('Gagal memuat histori order.', 'error');
+    if (requestId === orderFetchId) {
+      orders.value = [];
+      orderTotal.value = 0;
+      orderSummaryMeta.value = null;
+      orderAvailableCouriers.value = [];
+      toast.push('Gagal memuat histori order.', 'error');
+    }
+  } finally {
+    if (requestId === orderFetchId) {
+      ordersLoading.value = false;
+    }
   }
+}
+
+function scheduleLoadOrders(delay = 250) {
+  if (orderFetchTimer) {
+    clearTimeout(orderFetchTimer);
+  }
+  orderFetchTimer = setTimeout(() => {
+    orderFetchTimer = null;
+    void loadOrders();
+  }, delay);
 }
 
 async function exportOrders() {
@@ -1526,7 +1535,6 @@ function nextOrderPage() {
 
 onMounted(async () => {
   await loadInitial();
-  await loadOrders();
 });
 
 watch(
@@ -1573,10 +1581,6 @@ watch(recipientMode, (mode) => {
   }
 });
 
-watch(orderFilterChips, () => {
-  orderPage.value = 1;
-});
-
 watch(orderDateStart, (value) => {
   if (value && orderDateEnd.value && value > orderDateEnd.value) {
     orderDateEnd.value = value;
@@ -1586,6 +1590,27 @@ watch(orderDateStart, (value) => {
 watch(orderDateEnd, (value) => {
   if (value && orderDateStart.value && value < orderDateStart.value) {
     orderDateStart.value = value;
+  }
+});
+
+watch(orderSearch, () => {
+  orderPage.value = 1;
+  scheduleLoadOrders();
+});
+
+watch(orderCourierFilter, () => {
+  orderPage.value = 1;
+  void loadOrders();
+});
+
+watch([orderDateStart, orderDateEnd], () => {
+  orderPage.value = 1;
+  void loadOrders();
+});
+
+watch(orderPage, (value, oldValue) => {
+  if (value !== oldValue) {
+    void loadOrders();
   }
 });
 

@@ -131,9 +131,49 @@ export async function updateSettings(payload: AppSettings): Promise<AppSettings>
   return adaptSettings(updated);
 }
 
-export async function listCouriers(): Promise<Courier[]> {
-  const couriers = await getJson<ApiCourier[]>('/couriers');
-  return couriers.map(adaptCourier);
+export interface CourierListParams {
+  page?: number;
+  pageSize?: number;
+  query?: string;
+}
+
+export interface CourierListResponse {
+  items: Courier[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+type ApiCourierListResponse = {
+  items: ApiCourier[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+function buildCourierQuery(params?: CourierListParams): string {
+  const searchParams = new URLSearchParams();
+  if (params?.page) {
+    searchParams.set('page', String(params.page));
+  }
+  if (params?.pageSize) {
+    searchParams.set('pageSize', String(params.pageSize));
+  }
+  if (params?.query && params.query.trim().length > 0) {
+    searchParams.set('q', params.query.trim());
+  }
+  const query = searchParams.toString();
+  return query ? `?${query}` : '';
+}
+
+export async function listCouriers(params?: CourierListParams): Promise<CourierListResponse> {
+  const response = await getJson<ApiCourierListResponse>(`/couriers${buildCourierQuery(params)}`);
+  return {
+    items: response.items.map(adaptCourier),
+    total: response.total,
+    page: response.page,
+    pageSize: response.pageSize
+  };
 }
 
 export async function saveCourier(payload: Courier): Promise<Courier> {

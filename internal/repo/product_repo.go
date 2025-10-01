@@ -1,22 +1,197 @@
 package repo
 
 import (
-	"context"
-	"database/sql"
-	"fmt"
-	"time"
+    "context"
+    "database/sql"
+    "fmt"
+    "strings"
+    "time"
 
-	"github.com/google/uuid"
+    "github.com/google/uuid"
 
-	"smartseller-lite-starter/internal/domain"
+    "smartseller-lite-starter/internal/domain"
 )
 
 type ProductRepository struct {
-	db *sql.DB
+    db *sql.DB
 }
 
 func NewProductRepository(db *sql.DB) *ProductRepository {
-	return &ProductRepository{db: db}
+    return &ProductRepository{db: db}
+}
+
+func (r *ProductRepository) ListPaged(ctx context.Context, opts ProductListOptions) (ProductListResult, error) {
+    const maxPageSize = 200
+
+    page := opts.Page
+    if page <= 0 {
+        page = 1
+    }
+    pageSize := opts.PageSize
+    if pageSize < 0 {
+        pageSize = 0
+    }
+    if pageSize > maxPageSize {
+        pageSize = maxPageSize
+    }
+
+    whereParts := make([]string, 0)
+    if !opts.IncludeArchived {
+        whereParts = append(whereParts, "deleted_at IS NULL")
+    }
+    args := make([]any, 0)
+
+    query := strings.TrimSpace(strings.ToLower(opts.Query))
+    if query != "" {
+        like := "%" + query + "%"
+        whereParts = append(whereParts, "(LOWER(name) LIKE ? OR LOWER(sku) LIKE ? OR LOWER(IFNULL(category,'')) LIKE ?)")
+        args = append(args, like, like, like)
+    }
+
+    whereClause := ""
+    if len(whereParts) > 0 {
+        whereClause = "WHERE " + strings.Join(whereParts, " AND ")
+    }
+
+    limitClause := ""
+    listArgs := append([]any{}, args...)
+    if pageSize > 0 {
+        offset := (page - 1) * pageSize
+        limitClause = " LIMIT ? OFFSET ?"
+        listArgs = append(listArgs, pageSize, offset)
+    }
+
+    stmt := "SELECT id, name, sku, cost_price, sale_price, stock, category, low_stock_threshold, description, image_path, thumb_path, image_hash, image_width, image_height, image_size_bytes, thumb_width, thumb_height, thumb_size_bytes, deleted_at, created_at, updated_at FROM products " + whereClause + " ORDER BY name" + limitClause + ";"
+
+    rows, err := r.db.QueryContext(ctx, stmt, listArgs...)
+    if err != nil {
+        return ProductListResult{}, fmt.Errorf("list products: %w", err)
+    }
+    defer rows.Close()
+
+    items := make([]domain.Product, 0)
+    for rows.Next() {
+        var p domain.Product
+        var created, updated string
+        var deleted sql.NullString
+        if err := rows.Scan(&p.ID, &p.Name, &p.SKU, &p.CostPrice, &p.SalePrice, &p.Stock, &p.Category, &p.LowStockThreshold, &p.Description, &p.ImagePath, &p.ThumbPath, &p.ImageHash, &p.ImageWidth, &p.ImageHeight, &p.ImageSizeBytes, &p.ThumbWidth, &p.ThumbHeight, &p.ThumbSizeBytes, &deleted, &created, &updated); err != nil {
+            return ProductListResult{}, err
+        }
+        p.CreatedAt, _ = time.Parse(time.RFC3339, created)
+        p.UpdatedAt, _ = time.Parse(time.RFC3339, updated)
+        if deleted.Valid {
+            ts, _ := time.Parse(time.RFC3339, deleted.String)
+            p.DeletedAt = &ts
+        }
+        if p.LowStockThreshold <= 0 {
+            p.LowStockThreshold = 5
+        }
+        items = append(items, p)
+    }
+
+    countStmt := "SELECT COUNT(*) FROM products " + whereClause + ";"
+    var total int
+    if err := r.db.QueryRowContext(ctx, countStmt, args...).Scan(&total); err != nil {
+        return ProductListResult{}, fmt.Errorf("count products: %w", err)
+    }
+
+    // counts for out of stock and warning stock (stock >0 && <= threshold)
+    thresholdExpr := "COALESCE(NULLIF(low_stock_threshold,0),5)"
+
+    outClause := whereClause
+    if outClause != "" {
+        outClause += " AND "
+    } else {
+        outClause = "WHERE "
+    }
+    outClause += "stock <= 0"
+    outStmt := "SELECT COUNT(*) FROM products " + outClause + ";"
+    var outOfStock int
+    if err := r.db.QueryRowContext(ctx, outStmt, args...).Scan(&outOfStock); err != nil {
+        return ProductListResult{}, fmt.Errorf("count out of stock: %w", err)
+    }
+
+    warnClause := whereClause
+    if warnClause != "" {
+        warnClause += " AND "
+    } else {
+        warnClause = "WHERE "
+    }
+    warnClause += fmt.Sprintf("stock > 0 AND stock <= %s", thresholdExpr)
+    warnStmt := "SELECT COUNT(*) FROM products " + warnClause + ";"
+    var warning int
+    if err := r.db.QueryRowContext(ctx, warnStmt, args...).Scan(&warning); err != nil {
+        return ProductListResult{}, fmt.Errorf("count warning stock: %w", err)
+    }
+
+    // highlights - up to 5 products low stock (including zero)
+    highlightClause := whereClause
+    if highlightClause != "" {
+        highlightClause += " AND "
+    } else {
+        highlightClause = "WHERE "
+    }
+    highlightClause += fmt.Sprintf("stock <= %s", thresholdExpr)
+    highlightStmt := "SELECT id, name, sku, cost_price, sale_price, stock, category, low_stock_threshold, description, image_path, thumb_path, image_hash, image_width, image_height, image_size_bytes, thumb_width, thumb_height, thumb_size_bytes, deleted_at, created_at, updated_at FROM products " + highlightClause + " ORDER BY stock ASC, name ASC LIMIT 5;"
+    highlightRows, err := r.db.QueryContext(ctx, highlightStmt, args...)
+    if err != nil {
+        return ProductListResult{}, fmt.Errorf("highlight low stock: %w", err)
+    }
+    defer highlightRows.Close()
+
+    highlights := make([]domain.Product, 0)
+    for highlightRows.Next() {
+        var p domain.Product
+        var created, updated string
+        var deleted sql.NullString
+        if err := highlightRows.Scan(&p.ID, &p.Name, &p.SKU, &p.CostPrice, &p.SalePrice, &p.Stock, &p.Category, &p.LowStockThreshold, &p.Description, &p.ImagePath, &p.ThumbPath, &p.ImageHash, &p.ImageWidth, &p.ImageHeight, &p.ImageSizeBytes, &p.ThumbWidth, &p.ThumbHeight, &p.ThumbSizeBytes, &deleted, &created, &updated); err != nil {
+            return ProductListResult{}, err
+        }
+        p.CreatedAt, _ = time.Parse(time.RFC3339, created)
+        p.UpdatedAt, _ = time.Parse(time.RFC3339, updated)
+        if deleted.Valid {
+            ts, _ := time.Parse(time.RFC3339, deleted.String)
+            p.DeletedAt = &ts
+        }
+        if p.LowStockThreshold <= 0 {
+            p.LowStockThreshold = 5
+        }
+        highlights = append(highlights, p)
+    }
+
+    result := ProductListResult{
+        Items:              items,
+        Total:              total,
+        Page:               page,
+        PageSize:           pageSize,
+        OutOfStockCount:    outOfStock,
+        WarningStockCount:  warning,
+        LowStockHighlights: highlights,
+    }
+
+    if pageSize <= 0 {
+        result.Page = 1
+        result.PageSize = len(items)
+    }
+
+    return result, nil
+}
+
+type ProductListOptions struct {
+    Query           string
+    Page            int
+    PageSize        int
+    IncludeArchived bool
+}
+
+type ProductListResult struct {
+    Items              []domain.Product
+    Total              int
+    Page               int
+    PageSize           int
+    OutOfStockCount    int
+    WarningStockCount  int
+    LowStockHighlights []domain.Product
 }
 
 func (r *ProductRepository) Create(ctx context.Context, p *domain.Product) (*domain.Product, error) {
@@ -102,47 +277,20 @@ func (r *ProductRepository) AdjustStock(ctx context.Context, productID string, d
 	return nil
 }
 
-func (r *ProductRepository) list(ctx context.Context, includeArchived bool) ([]domain.Product, error) {
-	base := `SELECT id, name, sku, cost_price, sale_price, stock, category, low_stock_threshold, description, image_path, thumb_path, image_hash, image_width, image_height, image_size_bytes, thumb_width, thumb_height, thumb_size_bytes, deleted_at, created_at, updated_at FROM products`
-	if !includeArchived {
-		base += ` WHERE deleted_at IS NULL`
-	}
-	base += ` ORDER BY name;`
-
-	rows, err := r.db.QueryContext(ctx, base)
-	if err != nil {
-		return nil, fmt.Errorf("list products: %w", err)
-	}
-	defer rows.Close()
-
-	items := []domain.Product{}
-	for rows.Next() {
-		var p domain.Product
-		var created, updated string
-		var deleted sql.NullString
-		if err := rows.Scan(&p.ID, &p.Name, &p.SKU, &p.CostPrice, &p.SalePrice, &p.Stock, &p.Category, &p.LowStockThreshold, &p.Description, &p.ImagePath, &p.ThumbPath, &p.ImageHash, &p.ImageWidth, &p.ImageHeight, &p.ImageSizeBytes, &p.ThumbWidth, &p.ThumbHeight, &p.ThumbSizeBytes, &deleted, &created, &updated); err != nil {
-			return nil, err
-		}
-		p.CreatedAt, _ = time.Parse(time.RFC3339, created)
-		p.UpdatedAt, _ = time.Parse(time.RFC3339, updated)
-		if deleted.Valid {
-			ts, _ := time.Parse(time.RFC3339, deleted.String)
-			p.DeletedAt = &ts
-		}
-		if p.LowStockThreshold <= 0 {
-			p.LowStockThreshold = 5
-		}
-		items = append(items, p)
-	}
-	return items, nil
-}
-
 func (r *ProductRepository) List(ctx context.Context) ([]domain.Product, error) {
-	return r.list(ctx, false)
+    res, err := r.ListPaged(ctx, ProductListOptions{Page: 1, PageSize: 0, IncludeArchived: false})
+    if err != nil {
+        return nil, err
+    }
+    return res.Items, nil
 }
 
 func (r *ProductRepository) ListIncludingArchived(ctx context.Context) ([]domain.Product, error) {
-	return r.list(ctx, true)
+    res, err := r.ListPaged(ctx, ProductListOptions{Page: 1, PageSize: 0, IncludeArchived: true})
+    if err != nil {
+        return nil, err
+    }
+    return res.Items, nil
 }
 
 func (r *ProductRepository) Get(ctx context.Context, id string) (*domain.Product, error) {

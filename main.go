@@ -141,6 +141,17 @@ func openDefaultBrowser(url string) {
 	}
 }
 
+func parsePositiveInt(raw string, fallback int) int {
+	if strings.TrimSpace(raw) == "" {
+		return fallback
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value <= 0 {
+		return fallback
+	}
+	return value
+}
+
 func mountAPI(r chi.Router, api *app.API) {
 	r.Route("/api", func(router chi.Router) {
 		router.Get("/products", handleListProducts(api))
@@ -198,12 +209,24 @@ func writeError(w http.ResponseWriter, status int, err error) {
 
 func handleListProducts(api *app.API) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		products, err := api.ListProducts(r.Context())
+		query := r.URL.Query()
+		page := parsePositiveInt(query.Get("page"), 1)
+		pageSize := parsePositiveInt(query.Get("pageSize"), 20)
+		if pageSize <= 0 {
+			pageSize = 20
+		}
+		search := strings.TrimSpace(query.Get("q"))
+
+		result, err := api.ListProducts(r.Context(), service.ProductListOptions{
+			Query:    search,
+			Page:     page,
+			PageSize: pageSize,
+		})
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, products)
+		writeJSON(w, http.StatusOK, result)
 	}
 }
 
@@ -275,12 +298,24 @@ func handleArchiveProduct(api *app.API) http.HandlerFunc {
 
 func handleListCustomers(api *app.API) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		customers, err := api.ListCustomers(r.Context())
+		query := r.URL.Query()
+		page := parsePositiveInt(query.Get("page"), 1)
+		pageSize := parsePositiveInt(query.Get("pageSize"), 20)
+		if pageSize <= 0 {
+			pageSize = 20
+		}
+		search := strings.TrimSpace(query.Get("q"))
+
+		result, err := api.ListCustomers(r.Context(), service.CustomerListOptions{
+			Query:    search,
+			Page:     page,
+			PageSize: pageSize,
+		})
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, customers)
+		writeJSON(w, http.StatusOK, result)
 	}
 }
 
@@ -321,18 +356,48 @@ func handleUpdateCustomer(api *app.API) http.HandlerFunc {
 
 func handleListOrders(api *app.API) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		limit := 50
-		if raw := r.URL.Query().Get("limit"); raw != "" {
-			if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
-				limit = parsed
-			}
+		query := r.URL.Query()
+		page := parsePositiveInt(query.Get("page"), 1)
+		pageSize := parsePositiveInt(query.Get("pageSize"), 5)
+		if pageSize <= 0 {
+			pageSize = 5
 		}
-		orders, err := api.ListOrders(r.Context(), limit)
+		search := strings.TrimSpace(query.Get("q"))
+		courier := strings.TrimSpace(query.Get("courier"))
+		dateStartStr := strings.TrimSpace(query.Get("dateStart"))
+		dateEndStr := strings.TrimSpace(query.Get("dateEnd"))
+
+		var dateStartPtr, dateEndPtr *time.Time
+		if dateStartStr != "" {
+			parsed, err := time.Parse("2006-01-02", dateStartStr)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, fmt.Errorf("tanggal mulai tidak valid"))
+				return
+			}
+			dateStartPtr = &parsed
+		}
+		if dateEndStr != "" {
+			parsed, err := time.Parse("2006-01-02", dateEndStr)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, fmt.Errorf("tanggal akhir tidak valid"))
+				return
+			}
+			dateEndPtr = &parsed
+		}
+
+		result, err := api.ListOrders(r.Context(), service.OrderListOptions{
+			Query:     search,
+			Courier:   courier,
+			DateStart: dateStartPtr,
+			DateEnd:   dateEndPtr,
+			Page:      page,
+			PageSize:  pageSize,
+		})
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, orders)
+		writeJSON(w, http.StatusOK, result)
 	}
 }
 
@@ -407,12 +472,24 @@ func handleUpdateSettings(api *app.API) http.HandlerFunc {
 
 func handleListCouriers(api *app.API) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		couriers, err := api.ListCouriers(r.Context())
+		query := r.URL.Query()
+		page := parsePositiveInt(query.Get("page"), 1)
+		pageSize := parsePositiveInt(query.Get("pageSize"), 20)
+		if pageSize <= 0 {
+			pageSize = 20
+		}
+		search := strings.TrimSpace(query.Get("q"))
+
+		result, err := api.ListCouriers(r.Context(), service.CourierListOptions{
+			Query:    search,
+			Page:     page,
+			PageSize: pageSize,
+		})
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, couriers)
+		writeJSON(w, http.StatusOK, result)
 	}
 }
 

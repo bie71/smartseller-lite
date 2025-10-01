@@ -10,6 +10,7 @@ import (
 	"image/png"
 	"math"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/chai2010/webp"
@@ -47,6 +48,35 @@ type OrderService struct {
 	products  *ProductService
 	customers *CustomerService
 	settings  *SettingsService
+}
+
+type OrderListOptions struct {
+	Query     string     `json:"query"`
+	Courier   string     `json:"courier"`
+	DateStart *time.Time `json:"dateStart,omitempty"`
+	DateEnd   *time.Time `json:"dateEnd,omitempty"`
+	Page      int        `json:"page"`
+	PageSize  int        `json:"pageSize"`
+}
+
+type OrderListSummary struct {
+	Count          int     `json:"count"`
+	Revenue        float64 `json:"revenue"`
+	Profit         float64 `json:"profit"`
+	TopCourier     string  `json:"topCourier"`
+	TopCourierHits int     `json:"topCourierHits"`
+	TopProductID   string  `json:"topProductId"`
+	TopProductName string  `json:"topProductName"`
+	TopProductQty  int     `json:"topProductQty"`
+}
+
+type OrderListResult struct {
+	Items    []domain.Order  `json:"items"`
+	Total    int             `json:"total"`
+	Page     int             `json:"page"`
+	PageSize int             `json:"pageSize"`
+	Summary  OrderListSummary `json:"summary"`
+	Couriers []string        `json:"couriers"`
 }
 
 func NewOrderService(repo *repo.OrderRepository, products *ProductService, customers *CustomerService, settings *SettingsService) *OrderService {
@@ -169,6 +199,39 @@ func (s *OrderService) Create(ctx context.Context, input CreateOrderInput) (*dom
 
 func (s *OrderService) List(ctx context.Context, limit int) ([]domain.Order, error) {
 	return s.repo.List(ctx, limit)
+}
+
+func (s *OrderService) ListPaged(ctx context.Context, opts OrderListOptions) (OrderListResult, error) {
+	repoResult, err := s.repo.ListPaged(ctx, repo.OrderListOptions{
+		Query:     opts.Query,
+		Courier:   opts.Courier,
+		DateStart: opts.DateStart,
+		DateEnd:   opts.DateEnd,
+		Page:      opts.Page,
+		PageSize:  opts.PageSize,
+	})
+	if err != nil {
+		return OrderListResult{}, err
+	}
+
+	result := OrderListResult{
+		Items:    repoResult.Items,
+		Total:    repoResult.Total,
+		Page:     repoResult.Page,
+		PageSize: repoResult.PageSize,
+		Couriers: repoResult.Couriers,
+		Summary: OrderListSummary{
+			Count:          repoResult.Summary.Count,
+			Revenue:        repoResult.Summary.Revenue,
+			Profit:         repoResult.Summary.Profit,
+			TopCourier:     repoResult.Summary.TopCourier,
+			TopCourierHits: repoResult.Summary.TopCourierHits,
+			TopProductID:   repoResult.Summary.TopProductID,
+			TopProductName: repoResult.Summary.TopProductName,
+			TopProductQty:  repoResult.Summary.TopProductQty,
+		},
+	}
+	return result, nil
 }
 
 func (s *OrderService) ListAll(ctx context.Context) ([]domain.Order, error) {

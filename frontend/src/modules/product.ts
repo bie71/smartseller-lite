@@ -62,9 +62,58 @@ function adaptProduct(product: ApiProduct): Product {
   };
 }
 
-export async function listProducts(): Promise<Product[]> {
-  const products = await getJson<ApiProduct[]>('/products');
-  return products.map(adaptProduct);
+export interface ProductListParams {
+  page?: number;
+  pageSize?: number;
+  query?: string;
+}
+
+export interface ProductListResponse {
+  items: Product[];
+  total: number;
+  page: number;
+  pageSize: number;
+  outOfStockCount: number;
+  warningStockCount: number;
+  lowStockHighlights: Product[];
+}
+
+type ApiProductListResponse = {
+  items: ApiProduct[];
+  total: number;
+  page: number;
+  pageSize: number;
+  outOfStockCount: number;
+  warningStockCount: number;
+  lowStockHighlights: ApiProduct[];
+};
+
+function buildQuery(params?: ProductListParams): string {
+  const searchParams = new URLSearchParams();
+  if (params?.page) {
+    searchParams.set('page', String(params.page));
+  }
+  if (params?.pageSize) {
+    searchParams.set('pageSize', String(params.pageSize));
+  }
+  if (params?.query && params.query.trim().length > 0) {
+    searchParams.set('q', params.query.trim());
+  }
+  const query = searchParams.toString();
+  return query ? `?${query}` : '';
+}
+
+export async function listProducts(params?: ProductListParams): Promise<ProductListResponse> {
+  const response = await getJson<ApiProductListResponse>(`/products${buildQuery(params)}`);
+  return {
+    items: response.items.map(adaptProduct),
+    total: response.total,
+    page: response.page,
+    pageSize: response.pageSize,
+    outOfStockCount: response.outOfStockCount,
+    warningStockCount: response.warningStockCount,
+    lowStockHighlights: response.lowStockHighlights.map(adaptProduct)
+  };
 }
 
 export async function saveProduct(product: Product): Promise<Product> {

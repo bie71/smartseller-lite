@@ -1,14 +1,15 @@
 package repo
 
 import (
-	"context"
-	"database/sql"
-	"fmt"
-	"time"
+    "context"
+    "database/sql"
+    "fmt"
+    "strings"
+    "time"
 
-	"github.com/google/uuid"
+    "github.com/google/uuid"
 
-	"smartseller-lite-starter/internal/domain"
+    "smartseller-lite-starter/internal/domain"
 )
 
 type OrderRepository struct {
@@ -16,7 +17,170 @@ type OrderRepository struct {
 }
 
 func NewOrderRepository(db *sql.DB) *OrderRepository {
-	return &OrderRepository{db: db}
+    return &OrderRepository{db: db}
+}
+
+func (r *OrderRepository) ListPaged(ctx context.Context, opts OrderListOptions) (OrderListResult, error) {
+    const maxPageSize = 100
+
+    page := opts.Page
+    if page <= 0 {
+        page = 1
+    }
+    pageSize := opts.PageSize
+    if pageSize < 0 {
+        pageSize = 0
+    }
+    if pageSize > maxPageSize {
+        pageSize = maxPageSize
+    }
+
+    whereParts := make([]string, 0)
+    args := make([]any, 0)
+
+    query := strings.TrimSpace(strings.ToLower(opts.Query))
+    if query != "" {
+        like := "%" + query + "%"
+        whereParts = append(whereParts, "(LOWER(o.code) LIKE ? OR LOWER(IFNULL(o.notes,'')) LIKE ? OR LOWER(IFNULL(o.shipment_courier,'')) LIKE ? OR LOWER(IFNULL(o.shipment_service,'')) LIKE ? OR LOWER(IFNULL(o.shipment_tracking,'')) LIKE ? OR EXISTS (SELECT 1 FROM customers cb WHERE cb.id = o.buyer_id AND LOWER(cb.name) LIKE ?) OR EXISTS (SELECT 1 FROM customers cr WHERE cr.id = o.recipient_id AND LOWER(cr.name) LIKE ?) OR EXISTS (SELECT 1 FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id WHERE oi.order_id = o.id AND (LOWER(IFNULL(p.name,'')) LIKE ? OR LOWER(IFNULL(p.sku,'')) LIKE ?)))")
+        args = append(args, like, like, like, like, like, like, like, like, like)
+    }
+
+    courier := strings.TrimSpace(opts.Courier)
+    if courier != "" && strings.ToLower(courier) != "all" {
+        whereParts = append(whereParts, "LOWER(IFNULL(o.shipment_courier,'')) = ?")
+        args = append(args, strings.ToLower(courier))
+    }
+
+    if opts.DateStart != nil {
+        whereParts = append(whereParts, "o.created_at >= ?")
+        args = append(args, opts.DateStart.UTC().Format(time.RFC3339))
+    }
+    if opts.DateEnd != nil {
+        end := opts.DateEnd.UTC().Add(24 * time.Hour)
+        whereParts = append(whereParts, "o.created_at < ?")
+        args = append(args, end.Format(time.RFC3339))
+    }
+
+    whereClause := ""
+    if len(whereParts) > 0 {
+        whereClause = "WHERE " + strings.Join(whereParts, " AND ")
+    }
+
+    limitClause := ""
+    listArgs := append([]any{}, args...)
+    if pageSize > 0 {
+        offset := (page - 1) * pageSize
+        limitClause = " LIMIT ? OFFSET ?"
+        listArgs = append(listArgs, pageSize, offset)
+    }
+
+    stmt := "SELECT o.id, o.code, o.buyer_id, o.recipient_id, o.shipment_courier, o.shipment_service, o.shipment_tracking, o.shipment_cost, o.discount, o.total, o.profit, o.notes, o.created_at, o.updated_at FROM orders o " + whereClause + " ORDER BY o.created_at DESC" + limitClause + ";"
+
+    rows, err := r.db.QueryContext(ctx, stmt, listArgs...)
+    if err != nil {
+        return OrderListResult{}, fmt.Errorf("list orders: %w", err)
+    }
+    defer rows.Close()
+
+    items := make([]domain.Order, 0)
+    for rows.Next() {
+        var o domain.Order
+        var created, updated string
+        if err := rows.Scan(&o.ID, &o.Code, &o.BuyerID, &o.RecipientID, &o.Shipment.Courier, &o.Shipment.ServiceLevel, &o.Shipment.TrackingCode, &o.Shipment.ShippingCost, &o.Discount, &o.Total, &o.Profit, &o.Notes, &created, &updated); err != nil {
+            return OrderListResult{}, err
+        }
+        o.CreatedAt, _ = time.Parse(time.RFC3339, created)
+        o.UpdatedAt, _ = time.Parse(time.RFC3339, updated)
+        itemsList, err := r.itemsByOrder(ctx, o.ID)
+        if err != nil {
+            return OrderListResult{}, err
+        }
+        o.Items = itemsList
+        items = append(items, o)
+    }
+
+    countStmt := "SELECT COUNT(*) FROM orders o " + whereClause + ";"
+    var total int
+    if err := r.db.QueryRowContext(ctx, countStmt, args...).Scan(&total); err != nil {
+        return OrderListResult{}, fmt.Errorf("count orders: %w", err)
+    }
+
+    summary := OrderListSummary{Count: total}
+
+    sumStmt := "SELECT COALESCE(SUM(o.total),0), COALESCE(SUM(o.profit),0) FROM orders o " + whereClause + ";"
+    if err := r.db.QueryRowContext(ctx, sumStmt, args...).Scan(&summary.Revenue, &summary.Profit); err != nil {
+        return OrderListResult{}, fmt.Errorf("summary totals: %w", err)
+    }
+
+    courierStmt := "SELECT IFNULL(o.shipment_courier, '') AS courier, COUNT(*) AS hits FROM orders o " + whereClause + " GROUP BY courier ORDER BY hits DESC LIMIT 1;"
+    if err := r.db.QueryRowContext(ctx, courierStmt, args...).Scan(&summary.TopCourier, &summary.TopCourierHits); err != nil && err != sql.ErrNoRows {
+        return OrderListResult{}, fmt.Errorf("top courier: %w", err)
+    }
+
+    productStmt := "SELECT IFNULL(p.id,''), IFNULL(p.name,''), SUM(oi.quantity) AS qty FROM order_items oi JOIN orders o ON o.id = oi.order_id LEFT JOIN products p ON p.id = oi.product_id " + whereClause + " GROUP BY p.id, p.name ORDER BY qty DESC LIMIT 1;"
+    if err := r.db.QueryRowContext(ctx, productStmt, args...).Scan(&summary.TopProductID, &summary.TopProductName, &summary.TopProductQty); err != nil && err != sql.ErrNoRows {
+        return OrderListResult{}, fmt.Errorf("top product: %w", err)
+    }
+
+    couriersStmt := "SELECT DISTINCT IFNULL(o.shipment_courier,'') FROM orders o " + whereClause + " ORDER BY 1;"
+    courierRows, err := r.db.QueryContext(ctx, couriersStmt, args...)
+    if err != nil {
+        return OrderListResult{}, fmt.Errorf("list couriers: %w", err)
+    }
+    defer courierRows.Close()
+
+    couriers := make([]string, 0)
+    for courierRows.Next() {
+        var name string
+        if err := courierRows.Scan(&name); err != nil {
+            return OrderListResult{}, err
+        }
+        couriers = append(couriers, name)
+    }
+
+    result := OrderListResult{
+        Items:    items,
+        Total:    total,
+        Page:     page,
+        PageSize: pageSize,
+        Summary:  summary,
+        Couriers: couriers,
+    }
+    if pageSize <= 0 {
+        result.Page = 1
+        result.PageSize = len(items)
+    }
+
+    return result, nil
+}
+
+type OrderListOptions struct {
+    Query      string
+    Courier    string
+    DateStart  *time.Time
+    DateEnd    *time.Time
+    Page       int
+    PageSize   int
+}
+
+type OrderListSummary struct {
+    Count          int     `json:"count"`
+    Revenue        float64 `json:"revenue"`
+    Profit         float64 `json:"profit"`
+    TopCourier     string  `json:"topCourier"`
+    TopCourierHits int     `json:"topCourierHits"`
+    TopProductID   string  `json:"topProductId"`
+    TopProductName string  `json:"topProductName"`
+    TopProductQty  int     `json:"topProductQty"`
+}
+
+type OrderListResult struct {
+    Items    []domain.Order  `json:"items"`
+    Total    int             `json:"total"`
+    Page     int             `json:"page"`
+    PageSize int             `json:"pageSize"`
+    Summary  OrderListSummary `json:"summary"`
+    Couriers []string        `json:"couriers"`
 }
 
 func (r *OrderRepository) Create(ctx context.Context, o *domain.Order) (*domain.Order, error) {
@@ -74,35 +238,11 @@ func (r *OrderRepository) Create(ctx context.Context, o *domain.Order) (*domain.
 }
 
 func (r *OrderRepository) List(ctx context.Context, limit int) ([]domain.Order, error) {
-	if limit <= 0 || limit > 200 {
-		limit = 100
-	}
-	const stmt = `SELECT id, code, buyer_id, recipient_id, shipment_courier, shipment_service, shipment_tracking, shipment_cost, discount, total, profit, notes, created_at, updated_at
-                 FROM orders ORDER BY created_at DESC LIMIT ?;`
-
-	rows, err := r.db.QueryContext(ctx, stmt, limit)
-	if err != nil {
-		return nil, fmt.Errorf("list orders: %w", err)
-	}
-	defer rows.Close()
-
-	orders := []domain.Order{}
-	for rows.Next() {
-		var o domain.Order
-		var created, updated string
-		if err := rows.Scan(&o.ID, &o.Code, &o.BuyerID, &o.RecipientID, &o.Shipment.Courier, &o.Shipment.ServiceLevel, &o.Shipment.TrackingCode, &o.Shipment.ShippingCost, &o.Discount, &o.Total, &o.Profit, &o.Notes, &created, &updated); err != nil {
-			return nil, err
-		}
-		o.CreatedAt, _ = time.Parse(time.RFC3339, created)
-		o.UpdatedAt, _ = time.Parse(time.RFC3339, updated)
-		items, err := r.itemsByOrder(ctx, o.ID)
-		if err != nil {
-			return nil, err
-		}
-		o.Items = items
-		orders = append(orders, o)
-	}
-	return orders, nil
+    result, err := r.ListPaged(ctx, OrderListOptions{Page: 1, PageSize: limit})
+    if err != nil {
+        return nil, err
+    }
+    return result.Items, nil
 }
 
 func (r *OrderRepository) ListAll(ctx context.Context) ([]domain.Order, error) {

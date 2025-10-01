@@ -111,15 +111,78 @@ function adaptOrder(order: ApiOrder): Order {
   };
 }
 
-export async function listOrders(limit?: number): Promise<Order[]> {
+export interface OrderListParams {
+  page?: number;
+  pageSize?: number;
+  query?: string;
+  courier?: string;
+  dateStart?: string;
+  dateEnd?: string;
+}
+
+export interface OrderListSummary {
+  count: number;
+  revenue: number;
+  profit: number;
+  topCourier: string;
+  topCourierHits: number;
+  topProductId: string;
+  topProductName: string;
+  topProductQty: number;
+}
+
+export interface OrderListResponse {
+  items: Order[];
+  total: number;
+  page: number;
+  pageSize: number;
+  summary: OrderListSummary;
+  couriers: string[];
+}
+
+type ApiOrderListResponse = {
+  items: ApiOrder[];
+  total: number;
+  page: number;
+  pageSize: number;
+  summary: OrderListSummary;
+  couriers: string[];
+};
+
+function buildOrderQuery(params?: OrderListParams): string {
   const searchParams = new URLSearchParams();
-  if (limit) {
-    searchParams.set('limit', String(limit));
+  if (params?.page) {
+    searchParams.set('page', String(params.page));
+  }
+  if (params?.pageSize) {
+    searchParams.set('pageSize', String(params.pageSize));
+  }
+  if (params?.query && params.query.trim().length > 0) {
+    searchParams.set('q', params.query.trim());
+  }
+  if (params?.courier && params.courier.trim().length > 0) {
+    searchParams.set('courier', params.courier.trim());
+  }
+  if (params?.dateStart && params.dateStart.trim().length > 0) {
+    searchParams.set('dateStart', params.dateStart.trim());
+  }
+  if (params?.dateEnd && params.dateEnd.trim().length > 0) {
+    searchParams.set('dateEnd', params.dateEnd.trim());
   }
   const query = searchParams.toString();
-  const path = query ? `/orders?${query}` : '/orders';
-  const orders = await getJson<ApiOrder[]>(path);
-  return orders.map(adaptOrder);
+  return query ? `?${query}` : '';
+}
+
+export async function listOrders(params?: OrderListParams): Promise<OrderListResponse> {
+  const response = await getJson<ApiOrderListResponse>(`/orders${buildOrderQuery(params)}`);
+  return {
+    items: response.items.map(adaptOrder),
+    total: response.total,
+    page: response.page,
+    pageSize: response.pageSize,
+    summary: response.summary,
+    couriers: response.couriers
+  };
 }
 
 export async function createOrder(payload: CreateOrderPayload): Promise<Order> {

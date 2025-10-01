@@ -295,7 +295,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-if="!productModalFiltered.length">
+              <tr v-if="!productModalItems.length">
                 <td colspan="4" class="py-6 text-center text-slate-500">Tidak ada produk yang cocok dengan pencarian.</td>
               </tr>
               <tr v-for="product in productModalItems" :key="product.id" class="border-t border-slate-100">
@@ -347,7 +347,7 @@
           </table>
         </div>
         <div
-          v-if="productModalFiltered.length"
+          v-if="productModalItems.length"
           class="flex flex-col gap-3 border-t border-slate-100 pt-4 text-sm text-slate-500 md:flex-row md:items-center md:justify-between"
         >
           <span>{{ productModalRangeLabel }}</span>
@@ -478,8 +478,10 @@ const emit = defineEmits<{ (e: 'request-stock-opname', productId: string): void 
 const props = defineProps<{ refreshToken: number }>();
 
 const products = ref<Product[]>([]);
+const productsTotal = ref(0);
 const productsLoading = ref(true);
 const loadError = ref('');
+const productSearch = ref('');
 const editing = ref(false);
 const page = ref(1);
 const pageSize = 6;
@@ -490,13 +492,21 @@ const productModalOpen = ref(false);
 const productModalSearch = ref('');
 const productModalPage = ref(1);
 const productModalPageSize = 12;
+const productModalItems = ref<Product[]>([]);
+const productModalTotal = ref(0);
+const productModalLoading = ref(false);
+const productModalError = ref('');
 
 const productDetailOpen = ref(false);
 const productDetail = ref<Product | null>(null);
 
 const toast = useToastStore();
+const outOfStockStat = ref(0);
+const warningStockStat = ref(0);
+const lowStockHighlights = ref<Product[]>([]);
 
-let loadRequestId = 0;
+let productFetchId = 0;
+let productFetchTimer: ReturnType<typeof setTimeout> | null = null;
 
 const form = reactive<ProductForm>({
   id: undefined,
@@ -631,64 +641,31 @@ function stockSeverity(product: Product): number {
   return 0;
 }
 
-const lowStockProducts = computed(() => products.value.filter((product) => stockSeverity(product) >= 1));
-const outOfStockProducts = computed(() => products.value.filter((product) => product.stock <= 0));
-const warningStockProducts = computed(() => lowStockProducts.value.filter((product) => product.stock > 0));
-const outOfStockCount = computed(() => outOfStockProducts.value.length);
-const warningStockCount = computed(() => warningStockProducts.value.length);
+const lowStockProducts = computed(() => lowStockHighlights.value);
+const outOfStockCount = computed(() => outOfStockStat.value);
+const warningStockCount = computed(() => warningStockStat.value);
 
-const totalPages = computed(() => (products.value.length ? Math.ceil(products.value.length / pageSize) : 1));
-const paginatedProducts = computed(() => {
-  if (!products.value.length) {
-    return [];
-  }
-  const start = (page.value - 1) * pageSize;
-  return products.value.slice(start, start + pageSize);
-});
+const totalPages = computed(() => (productsTotal.value ? Math.ceil(productsTotal.value / pageSize) : 1));
+const paginatedProducts = computed(() => products.value);
 
 const productRangeLabel = computed(() => {
-  if (!products.value.length) {
+  if (!productsTotal.value) {
     return 'Menampilkan 0 dari 0 produk';
   }
-  const start = (page.value - 1) * pageSize;
-  const from = start + 1;
-  const to = Math.min(start + pageSize, products.value.length);
-  return `Menampilkan ${from}-${to} dari ${products.value.length} produk`;
+  const start = (page.value - 1) * pageSize + 1;
+  const end = start + products.value.length - 1;
+  return `Menampilkan ${start}-${end} dari ${productsTotal.value} produk`;
 });
 
-const productModalFiltered = computed(() => {
-  const query = productModalSearch.value.trim().toLowerCase();
-  if (!query) {
-    return products.value;
-  }
-  return products.value.filter((product) => {
-    return [product.name, product.sku]
-      .filter(Boolean)
-      .some((field) => (field as string).toLowerCase().includes(query));
-  });
-});
-
-const productModalTotalPages = computed(() =>
-  productModalFiltered.value.length ? Math.ceil(productModalFiltered.value.length / productModalPageSize) : 1
-);
-
-const productModalItems = computed(() => {
-  if (!productModalFiltered.value.length) {
-    return [] as Product[];
-  }
-  const start = (productModalPage.value - 1) * productModalPageSize;
-  return productModalFiltered.value.slice(start, start + productModalPageSize);
-});
+const productModalTotalPages = computed(() => (productModalTotal.value ? Math.ceil(productModalTotal.value / productModalPageSize) : 1));
 
 const productModalRangeLabel = computed(() => {
-  const total = productModalFiltered.value.length;
-  if (!total) {
+  if (!productModalTotal.value) {
     return 'Menampilkan 0 dari 0 produk';
   }
-  const start = (productModalPage.value - 1) * productModalPageSize;
-  const from = start + 1;
-  const to = Math.min(start + productModalPageSize, total);
-  return `Menampilkan ${from}-${to} dari ${total} produk`;
+  const start = (productModalPage.value - 1) * productModalPageSize + 1;
+  const end = start + productModalItems.value.length - 1;
+  return `Menampilkan ${start}-${end} dari ${productModalTotal.value} produk`;
 });
 
 watch(products, () => {
@@ -700,12 +677,6 @@ watch(products, () => {
   if (page.value > totalPages.value) {
     page.value = totalPages.value;
   }
-  if (productModalPage.value > productModalTotalPages.value) {
-    productModalPage.value = productModalTotalPages.value;
-  }
-});
-
-watch(productModalFiltered, () => {
   if (productModalPage.value > productModalTotalPages.value) {
     productModalPage.value = productModalTotalPages.value;
   }
@@ -736,40 +707,137 @@ watch(productDetailOpen, (open) => {
 watch(
   () => props.refreshToken,
   () => {
-    retryLoadProducts();
+    void loadProducts();
   }
 );
 
+watch(productSearch, () => {
+  page.value = 1;
+  scheduleLoadProducts();
+});
+
+watch(page, (value, oldValue) => {
+  if (value !== oldValue) {
+    void loadProducts();
+  }
+});
+
+watch(productModalOpen, (open) => {
+  if (open) {
+    productModalSearch.value = '';
+    productModalPage.value = 1;
+    void loadProductModal();
+  } else {
+    productModalItems.value = [];
+    productModalTotal.value = 0;
+  }
+});
+
+watch(productModalSearch, () => {
+  productModalPage.value = 1;
+  scheduleLoadProductModal();
+});
+
+watch(productModalPage, (value, oldValue) => {
+  if (value !== oldValue && productModalOpen.value) {
+    void loadProductModal();
+  }
+});
+
 async function loadProducts() {
-  const requestId = ++loadRequestId;
+  const requestId = ++productFetchId;
   productsLoading.value = true;
   loadError.value = '';
   try {
-    const fetched = await listProducts();
-    const normalised = fetched.map((item) => ({
+    const response = await listProducts({
+      page: page.value,
+      pageSize,
+      query: productSearch.value.trim() || undefined
+    });
+
+    if (requestId !== productFetchId) {
+      return;
+    }
+
+    const totalPages = Math.max(1, Math.ceil(response.total / pageSize));
+    if (page.value > totalPages) {
+      page.value = totalPages;
+      return;
+    }
+
+    products.value = response.items.map((item) => ({
       ...item,
       lowStockThreshold: resolveThreshold(item)
     }));
-    normalised.sort((a, b) => {
-      const severityDiff = stockSeverity(b) - stockSeverity(a);
-      if (severityDiff !== 0) return severityDiff;
-      return a.name.localeCompare(b.name, 'id');
-    });
-    if (requestId === loadRequestId) {
-      products.value = normalised;
-    }
+    productsTotal.value = response.total;
+    outOfStockStat.value = response.outOfStockCount;
+    warningStockStat.value = response.warningStockCount;
+    lowStockHighlights.value = response.lowStockHighlights.map((item) => ({
+      ...item,
+      lowStockThreshold: resolveThreshold(item)
+    }));
   } catch (error) {
     console.error(error);
-    if (requestId === loadRequestId) {
+    if (requestId === productFetchId) {
       products.value = [];
+      productsTotal.value = 0;
+      outOfStockStat.value = 0;
+      warningStockStat.value = 0;
+      lowStockHighlights.value = [];
       loadError.value = 'Gagal memuat data produk. Silakan coba lagi.';
       toast.push(loadError.value, 'error');
     }
   } finally {
-    if (requestId === loadRequestId) {
+    if (requestId === productFetchId) {
       productsLoading.value = false;
     }
   }
+}
+
+function scheduleLoadProducts(delay = 250) {
+  if (productFetchTimer) {
+    clearTimeout(productFetchTimer);
+  }
+  productFetchTimer = setTimeout(() => {
+    productFetchTimer = null;
+    void loadProducts();
+  }, delay);
+}
+
+async function loadProductModal() {
+  productModalLoading.value = true;
+  productModalError.value = '';
+  try {
+    const response = await listProducts({
+      page: productModalPage.value,
+      pageSize: productModalPageSize,
+      query: productModalSearch.value.trim() || undefined
+    });
+    productModalItems.value = response.items;
+    productModalTotal.value = response.total;
+  } catch (error) {
+    console.error(error);
+    productModalItems.value = [];
+    productModalTotal.value = 0;
+    productModalError.value = 'Gagal memuat daftar produk.';
+    toast.push(productModalError.value, 'error');
+  } finally {
+    productModalLoading.value = false;
+  }
+}
+
+let productModalTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleLoadProductModal(delay = 250) {
+  if (productModalTimer) {
+    clearTimeout(productModalTimer);
+  }
+  productModalTimer = setTimeout(() => {
+    productModalTimer = null;
+    if (productModalOpen.value) {
+      void loadProductModal();
+    }
+  }, delay);
 }
 
 function retryLoadProducts() {

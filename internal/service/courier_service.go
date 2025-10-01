@@ -15,6 +15,19 @@ type CourierService struct {
 	media *media.Manager
 }
 
+type CourierListOptions struct {
+	Query    string `json:"query"`
+	Page     int    `json:"page"`
+	PageSize int    `json:"pageSize"`
+}
+
+type CourierListResult struct {
+	Items    []domain.Courier `json:"items"`
+	Total    int              `json:"total"`
+	Page     int              `json:"page"`
+	PageSize int              `json:"pageSize"`
+}
+
 func NewCourierService(repo *repo.CourierRepository, mediaManager *media.Manager) *CourierService {
 	return &CourierService{repo: repo, media: mediaManager}
 }
@@ -44,14 +57,35 @@ func (s *CourierService) Warm(ctx context.Context) {
 
 func (s *CourierService) List(ctx context.Context) ([]domain.Courier, error) {
 	s.ensureDefaults(ctx)
-	items, err := s.repo.List(ctx)
+	result, err := s.repo.ListPaged(ctx, repo.CourierListOptions{Page: 1, PageSize: 0})
 	if err != nil {
 		return nil, err
 	}
-	for i := range items {
-		s.decorate(&items[i])
+	for i := range result.Items {
+		s.decorate(&result.Items[i])
 	}
-	return items, nil
+	return result.Items, nil
+}
+
+func (s *CourierService) ListPaged(ctx context.Context, opts CourierListOptions) (CourierListResult, error) {
+	s.ensureDefaults(ctx)
+	repoResult, err := s.repo.ListPaged(ctx, repo.CourierListOptions{
+		Query:    opts.Query,
+		Page:     opts.Page,
+		PageSize: opts.PageSize,
+	})
+	if err != nil {
+		return CourierListResult{}, err
+	}
+	for i := range repoResult.Items {
+		s.decorate(&repoResult.Items[i])
+	}
+	return CourierListResult{
+		Items:    repoResult.Items,
+		Total:    repoResult.Total,
+		Page:     repoResult.Page,
+		PageSize: repoResult.PageSize,
+	}, nil
 }
 
 func (s *CourierService) Save(ctx context.Context, courier domain.Courier) (*domain.Courier, error) {

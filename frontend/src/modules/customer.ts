@@ -39,9 +39,60 @@ function adaptCustomer(customer: ApiCustomer): Customer {
   };
 }
 
-export async function listCustomers(): Promise<Customer[]> {
-  const customers = await getJson<ApiCustomer[]>('/customers');
-  return customers.map(adaptCustomer);
+export interface CustomerListParams {
+  page?: number;
+  pageSize?: number;
+  query?: string;
+}
+
+export interface CustomerListResponse {
+  items: Customer[];
+  total: number;
+  page: number;
+  pageSize: number;
+  counts: {
+    customer: number;
+    marketer: number;
+    reseller: number;
+  };
+}
+
+type ApiCustomerListResponse = {
+  items: ApiCustomer[];
+  total: number;
+  page: number;
+  pageSize: number;
+  counts: {
+    customer: number;
+    marketer: number;
+    reseller: number;
+  };
+};
+
+function buildCustomerQuery(params?: CustomerListParams): string {
+  const searchParams = new URLSearchParams();
+  if (params?.page) {
+    searchParams.set('page', String(params.page));
+  }
+  if (params?.pageSize) {
+    searchParams.set('pageSize', String(params.pageSize));
+  }
+  if (params?.query && params.query.trim().length > 0) {
+    searchParams.set('q', params.query.trim());
+  }
+  const query = searchParams.toString();
+  return query ? `?${query}` : '';
+}
+
+export async function listCustomers(params?: CustomerListParams): Promise<CustomerListResponse> {
+  const response = await getJson<ApiCustomerListResponse>(`/customers${buildCustomerQuery(params)}`);
+  return {
+    items: response.items.map(adaptCustomer),
+    total: response.total,
+    page: response.page,
+    pageSize: response.pageSize,
+    counts: response.counts
+  };
 }
 
 export async function saveCustomer(customer: Customer): Promise<Customer> {
