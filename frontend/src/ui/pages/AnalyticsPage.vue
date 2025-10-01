@@ -184,6 +184,9 @@ const error = ref('');
 const orders = ref<Order[]>([]);
 const products = ref<Product[]>([]);
 const customers = ref<Customer[]>([]);
+const ordersTotal = ref(0);
+const productsTotal = ref(0);
+const customersTotal = ref(0);
 const lastUpdated = ref<Date | null>(null);
 
 const productMap = computed(() => {
@@ -196,12 +199,12 @@ const productMap = computed(() => {
   return map;
 });
 
-const totalOrders = computed(() => orders.value.length);
+const totalOrders = computed(() => (ordersTotal.value ? ordersTotal.value : orders.value.length));
 const totalRevenue = computed(() => orders.value.reduce((sum, order) => sum + order.total, 0));
 const totalProfit = computed(() => orders.value.reduce((sum, order) => sum + order.profit, 0));
 const averageOrderValue = computed(() => (totalOrders.value ? totalRevenue.value / totalOrders.value : 0));
 const profitMargin = computed(() => (totalRevenue.value ? totalProfit.value / totalRevenue.value : 0));
-const totalCustomers = computed(() => customers.value.length);
+const totalCustomers = computed(() => (customersTotal.value ? customersTotal.value : customers.value.length));
 const uniqueCustomers = computed(() => {
   const ids = new Set<string>();
   orders.value.forEach((order) => {
@@ -210,7 +213,7 @@ const uniqueCustomers = computed(() => {
   });
   return ids.size || totalCustomers.value;
 });
-const activeProducts = computed(() => products.value.length);
+const activeProducts = computed(() => (productsTotal.value ? productsTotal.value : products.value.length));
 
 function monthKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
@@ -372,13 +375,16 @@ async function loadAnalytics() {
   error.value = '';
   try {
     const [orderResults, productResults, customerResults] = await Promise.all([
-      listOrders(200),
-      listProducts(),
-      listCustomers()
+      listOrders({ page: 1, pageSize: 200 }),
+      listProducts({ page: 1, pageSize: 500 }),
+      listCustomers({ page: 1, pageSize: 500 })
     ]);
-    orders.value = orderResults;
-    products.value = productResults;
-    customers.value = customerResults;
+    orders.value = orderResults.items;
+    ordersTotal.value = orderResults.total;
+    products.value = productResults.items;
+    productsTotal.value = productResults.total;
+    customers.value = customerResults.items;
+    customersTotal.value = customerResults.total;
     lastUpdated.value = new Date();
   } catch (err) {
     console.error(err);
