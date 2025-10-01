@@ -454,9 +454,9 @@
         <div class="space-y-2">
           <p class="text-xs font-semibold uppercase text-slate-400">Item</p>
           <ul class="space-y-1">
-            <li v-for="item in activeOrder.items" :key="item.id" class="flex justify-between gap-4">
+            <li v-for="item in activeOrder.items" :key="item.id" class="flex justify-between gap-2">
               <span>{{ productName(item.productId) }} × {{ item.quantity }}</span>
-              <span class="font-mono">Rp {{ formatCurrency(Math.max(item.unitPrice - item.discount, 0)) }}</span>
+              <span class="font-mono text-left">Rp {{ formatCurrency(Math.max(item.unitPrice - item.discount, 0)) }}</span>
             </li>
           </ul>
         </div>
@@ -483,9 +483,9 @@
           {{ activeOrder.notes }}
         </div>
       </div>
-      <template #actions>
+      <!-- <template #actions>
         <button type="button" class="btn-secondary" @click="orderDetailOpen = false">Tutup</button>
-      </template>
+      </template> -->
     </BaseModal>
 
     <BaseModal v-model="labelPreviewOpen" :title="labelPreviewTitle" :subtitle="labelPreviewSubtitle">
@@ -503,24 +503,14 @@
         </button>
       </template>
     </BaseModal>
-  
+
     <!-- Panel Cetak Label -->
-    <transition name="fade">
-      <div v-if="showLabelPanel" class="fixed inset-0 -mt-5 z-50 bg-black/40 flex justify-center items-start p-4 overflow-y-auto h-screen w-screen">
-        <div class="bg-white w-full max-w-7xl rounded-2xl shadow-lg my-auto flex flex-col max-h-[90vh]">
-          <div class="flex items-center justify-between p-4 border-b flex-shrink-0">
-            <div class="flex items-center gap-2">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-primary" viewBox="0 0 20 20" fill="currentColor"><path d="M6 2a2 2 0 00-2 2v3h12V4a2 2 0 00-2-2H6z" /><path fill-rule="evenodd" d="M4 9a2 2 0 012-2h8a2 2 0 012 2v6h-3v3H7v-3H4V9zm6 6a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd" /></svg>
-              <h3 class="text-lg font-semibold">Cetak Label</h3>
-            </div>
-            <button class="text-slate-500 hover:text-slate-700" @click="showLabelPanel=false">Tutup</button>
-          </div>
-          <div class="p-4 overflow-y-auto">
-            <LabelForm :auto-data="autoLabelData" />
-          </div>
-        </div>
-      </div>
-    </transition>
+    <WideBaseModal v-model="showLabelPanel" title="Cetak Label">
+      <LabelForm :auto-data="autoLabelData" />
+      <!-- <template #actions>
+        <button type="button" class="btn-secondary" @click="showLabelPanel = false">Tutup</button>
+      </template> -->
+    </WideBaseModal>
   </section>
 
 </template>
@@ -535,6 +525,7 @@ import { createOrder, downloadLabel, ensureLabelBlob, generateLabel, listOrders,
 import { fetchOrdersCsv } from '../../modules/reports';
 import { listCouriers, type Courier } from '../../modules/settings';
 import BaseModal from '../components/BaseModal.vue';
+import WideBaseModal from '../components/WideBaseModal.vue';
 import LabelForm from '../components/LabelForm.vue';
 import { useToastStore } from '../stores/toast';
 import {
@@ -1412,39 +1403,6 @@ watch(orderDateEnd, (value) => {
 });
 
 
-const LABEL_APP_URL: string = (import.meta as any).env?.VITE_LABEL_APP_URL || 'http://localhost:3000';
-
-function getCustomerById(id?: string) {
-  if (!id) return undefined;
-  return (customers.value || []).find((c: any) => c.id === id);
-}
-
-function buildLabelAppUrl(order: Order) {
-  const buyer = getCustomerById(order.buyerId);
-  const recipient = getCustomerById(order.recipientId);
-  const params = new URLSearchParams();
-  if (buyer?.name) params.set('buyerName', buyer.name);
-  if (buyer?.phone) params.set('buyerPhone', buyer.phone);
-  if (buyer?.address) params.set('buyerAddress', buyer.address);
-  if (recipient?.name) params.set('recipientName', recipient.name);
-  if (recipient?.phone) params.set('recipientPhone', recipient.phone);
-  if (recipient?.address) params.set('recipientAddress', recipient.address);
-  if (order.shipment?.courier) params.set('courier', order.shipment.courier);
-  if (order.shipment?.serviceLevel) params.set('service', order.shipment.serviceLevel);
-  if (order.shipment?.trackingCode) params.set('tracking', order.shipment.trackingCode);
-  params.set('orderCode', order.code);
-  if (order.notes) params.set('notes', order.notes);
-  const url = `${LABEL_APP_URL}?tab=auto&${params.toString()}`;
-  return url;
-}
-
-function openLabelApp(order: Order) {
-  const url = buildLabelAppUrl(order);
-  window.open(url, '_blank', 'noopener,noreferrer');
-}
-
-
-
 const showLabelPanel = ref(false);
 
 function buildAutoLabelData(order?: Order | null) {
@@ -1467,5 +1425,14 @@ function buildAutoLabelData(order?: Order | null) {
 
 onBeforeUnmount(() => {
   revokeLabelPreviewUrl();
+});
+
+
+watch(showLabelPanel, (val) => {
+  if (val) {
+    document.body.classList.add("overflow-hidden");
+  } else {
+    document.body.classList.remove("overflow-hidden");
+  }
 });
 </script>
