@@ -299,7 +299,7 @@
         <footer class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div class="text-sm text-slate-600 flex items-center gap-2">
             <BanknotesIcon class="h-5 w-5 text-emerald-600" />
-            <span>Total bayar Rp {{ formatCurrency(orderTotal) }} · Profit Rp {{ formatCurrency(estimatedProfit) }}</span>
+            <span>Total bayar Rp {{ formatCurrency(orderPaymentTotal) }} · Profit Rp {{ formatCurrency(estimatedProfit) }}</span>
           </div>
           <button type="submit" class="btn-primary" :disabled="!canSubmit || savingOrder">
             <PrinterIcon class="h-5 w-5" />
@@ -776,7 +776,7 @@ const totalCost = computed(() =>
   }, 0)
 );
 
-const orderTotal = computed(() => subtotal.value - form.discount + form.shippingCost);
+const orderPaymentTotal = computed(() => subtotal.value - form.discount + form.shippingCost);
 
 const estimatedProfit = computed(() => {
   const shippingCostToSubtract = isBuyerPayingShipping.value ? 0 : form.shippingCost;
