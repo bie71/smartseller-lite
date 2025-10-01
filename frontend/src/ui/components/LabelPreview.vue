@@ -35,7 +35,7 @@
           <img v-if="logoSrc" :src="logoSrc" alt="Logo" class="max-h-8 w-auto rounded-xl" />
           <p class="font-bold text-sm">{{ appSettings?.brandName || 'SmartSeller' }}</p>
         </div>
-        <div v-if="label.isCOD" class="px-2 py-1 bg-black text-white font-bold text-sm rounded">
+        <div v-if="label.isCOD" class="px-2 py-1 bg-black text-white font-bold text-center justify-center text-sm rounded">
           COD: {{ formatCurrency(label.codAmount) }}
         </div>
       </div>

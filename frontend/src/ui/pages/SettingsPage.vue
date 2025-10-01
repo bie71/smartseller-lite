@@ -1,6 +1,6 @@
 <template>
   <section class="space-y-6">
-    <div class="grid gap-6 lg:grid-cols-[1.3fr,1fr]">
+    <div class="grid gap-6 lg:grid-cols-2">
       <div class="card space-y-5">
         <header class="flex items-center gap-3">
           <div class="h-12 w-12 rounded-full bg-primary/10 text-primary flex items-center justify-center">
@@ -46,115 +46,88 @@
         </form>
       </div>
 
-      <aside class="card bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white shadow-lg">
+      <div class="card space-y-5">
+        <header class="flex items-center gap-3">
+          <div class="h-12 w-12 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+            <ArrowDownTrayIcon class="h-6 w-6" />
+          </div>
+          <div>
+            <h2 class="text-xl font-semibold">Backup &amp; Restore</h2>
+            <p class="text-sm text-slate-500">Simpan salinan SQL lengkap dan pulihkan saat berpindah perangkat atau server.</p>
+          </div>
+        </header>
+
         <div class="space-y-4">
-          <h3 class="text-lg font-semibold flex items-center gap-2">
-            <SparklesIcon class="h-5 w-5" />
-            Pratinjau Label
-          </h3>
-          <p class="text-sm text-white/70">
-            Label pengiriman akan menampilkan logo dan nama brand Anda secara otomatis setiap kali mencetak.
+          <div class="flex flex-col gap-3 md:flex-row md:items-center">
+            <button type="button" class="btn-primary" :disabled="isBackingUp" @click="handleBackup">
+              <ArrowDownTrayIcon class="h-5 w-5" />
+              <span>{{ isBackingUp ? 'Menyiapkan...' : 'Unduh Backup SQL' }}</span>
+            </button>
+            <label :class="['btn-secondary cursor-pointer w-full md:w-auto', isRestoring ? 'opacity-60 pointer-events-none' : '']">
+              <ArrowPathIcon class="h-5 w-5" />
+              <span>{{ isRestoring ? 'Memulihkan...' : 'Pilih file backup' }}</span>
+              <input
+                ref="restoreInput"
+                type="file"
+                accept=".sql,application/sql,text/plain,.zip,application/zip"
+                class="hidden"
+                :disabled="isRestoring"
+                @change="handleRestoreFile"
+              />
+            </label>
+          </div>
+          <div class="grid gap-3 md:grid-cols-2">
+            <div class="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+              <p class="text-xs font-semibold uppercase text-slate-500">Mode Backup SQL</p>
+              <div class="mt-2 space-y-2 text-sm">
+                <label class="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    :checked="backupMode === 'all'"
+                    @change="backupMode = 'all'"
+                  />
+                  <span>Schema + Data (default)</span>
+                </label>
+                <label class="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    :checked="backupMode === 'data'"
+                    @change="backupMode = 'data'"
+                  />
+                  <span>Data saja</span>
+                </label>
+                <label class="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    :checked="backupMode === 'schema'"
+                    @change="backupMode = 'schema'"
+                  />
+                  <span>Schema saja</span>
+                </label>
+              </div>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+              <p class="text-xs font-semibold uppercase text-slate-500">Opsi Restore</p>
+              <div class="mt-2 space-y-2 text-sm">
+                <label class="flex items-center gap-2">
+                  <input type="checkbox" v-model="restoreOptions.disableForeignKeyChecks" />
+                  <span>Nonaktifkan pengecekan foreign key saat restore</span>
+                </label>
+                <label class="flex items-center gap-2">
+                  <input type="checkbox" v-model="restoreOptions.useTransaction" />
+                  <span>Jalankan restore dalam transaksi</span>
+                </label>
+              </div>
+            </div>
+          </div>
+          <p class="text-xs text-slate-500">
+            Pastikan file backup tersimpan aman. Proses restore SQL akan menggantikan seluruh data yang ada pada database.
           </p>
-          <div class="rounded-xl bg-white/10 p-4 space-y-3">
-            <div class="flex items-center gap-3">
-              <div class="h-14 w-14 bg-white/10 rounded-lg flex items-center justify-center overflow-hidden">
-                <img v-if="logoPreview" :src="logoPreview" alt="preview" class="max-h-12 max-w-12 object-contain" />
-                <PhotoIcon v-else class="h-6 w-6 text-white/60" />
-              </div>
-              <div>
-                <p class="text-base font-semibold">{{ form.brandName || 'SmartSeller Lite' }}</p>
-                <p class="text-xs text-white/60">Contoh label: #INV-00123</p>
-              </div>
-            </div>
-            <div class="text-xs space-y-1 text-white/80">
-              <p>Courier: JNE · REG</p>
-              <p>Penerima: Budi Santoso</p>
-              <p>Alamat: Jl. Melati No. 12, Jakarta</p>
-            </div>
-          </div>
         </div>
-      </aside>
-    </div>
-
-    <div class="card space-y-5">
-      <header class="flex items-center gap-3">
-        <div class="h-12 w-12 rounded-full bg-primary/10 text-primary flex items-center justify-center">
-          <ArrowDownTrayIcon class="h-6 w-6" />
-        </div>
-        <div>
-          <h2 class="text-xl font-semibold">Backup &amp; Restore</h2>
-          <p class="text-sm text-slate-500">Simpan salinan SQL lengkap dan pulihkan saat berpindah perangkat atau server.</p>
-        </div>
-      </header>
-
-      <div class="space-y-4">
-        <div class="flex flex-col gap-3 md:flex-row md:items-center">
-          <button type="button" class="btn-primary" :disabled="isBackingUp" @click="handleBackup">
-            <ArrowDownTrayIcon class="h-5 w-5" />
-            <span>{{ isBackingUp ? 'Menyiapkan...' : 'Unduh Backup SQL' }}</span>
-          </button>
-          <label :class="['btn-secondary cursor-pointer w-full md:w-auto', isRestoring ? 'opacity-60 pointer-events-none' : '']">
-            <ArrowPathIcon class="h-5 w-5" />
-            <span>{{ isRestoring ? 'Memulihkan...' : 'Pilih file backup' }}</span>
-            <input
-              ref="restoreInput"
-              type="file"
-              accept=".sql,application/sql,text/plain,.zip,application/zip"
-              class="hidden"
-              :disabled="isRestoring"
-              @change="handleRestoreFile"
-            />
-          </label>
-        </div>
-        <div class="grid gap-3 md:grid-cols-2">
-          <div class="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
-            <p class="text-xs font-semibold uppercase text-slate-500">Mode Backup SQL</p>
-            <div class="mt-2 space-y-2 text-sm">
-              <label class="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  :checked="backupMode === 'all'"
-                  @change="backupMode = 'all'"
-                />
-                <span>Schema + Data (default)</span>
-              </label>
-              <label class="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  :checked="backupMode === 'data'"
-                  @change="backupMode = 'data'"
-                />
-                <span>Data saja</span>
-              </label>
-              <label class="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  :checked="backupMode === 'schema'"
-                  @change="backupMode = 'schema'"
-                />
-                <span>Schema saja</span>
-              </label>
-            </div>
-          </div>
-          <div class="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
-            <p class="text-xs font-semibold uppercase text-slate-500">Opsi Restore</p>
-            <div class="mt-2 space-y-2 text-sm">
-              <label class="flex items-center gap-2">
-                <input type="checkbox" v-model="restoreOptions.disableForeignKeyChecks" />
-                <span>Nonaktifkan pengecekan foreign key saat restore</span>
-              </label>
-              <label class="flex items-center gap-2">
-                <input type="checkbox" v-model="restoreOptions.useTransaction" />
-                <span>Jalankan restore dalam transaksi</span>
-              </label>
-            </div>
-          </div>
-        </div>
-        <p class="text-xs text-slate-500">
-          Pastikan file backup tersimpan aman. Proses restore SQL akan menggantikan seluruh data yang ada pada database.
-        </p>
       </div>
     </div>
+
+
   </section>
 </template>
 
@@ -163,7 +136,7 @@ import { computed, reactive, ref, watch } from 'vue';
 import type { AppSettings } from '../../modules/settings';
 import { createBackup, getSettings, restoreBackup, updateSettings } from '../../modules/settings';
 import type { RestoreResult } from '../../modules/settings';
-import { ArrowDownTrayIcon, ArrowPathIcon, ArrowUpTrayIcon, CheckCircleIcon, Cog6ToothIcon, PhotoIcon, SparklesIcon } from '@heroicons/vue/24/outline';
+import { ArrowDownTrayIcon, ArrowPathIcon, ArrowUpTrayIcon, CheckCircleIcon, Cog6ToothIcon, PhotoIcon } from '@heroicons/vue/24/outline';
 import { useToastStore } from '../stores/toast';
 
 interface Props {
