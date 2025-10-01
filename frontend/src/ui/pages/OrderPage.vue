@@ -265,6 +265,10 @@
               @input="onShippingCostInput($event)"
               @blur="syncShippingCostDisplay"
             />
+            <div class="mt-2 flex items-center gap-2">
+              <input id="isBuyerPayingShipping" v-model="isBuyerPayingShipping" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary" />
+              <label for="isBuyerPayingShipping" class="text-sm text-slate-600">Ongkir dibayar pembeli</label>
+            </div>
           </div>
         </div>
 
@@ -297,7 +301,7 @@
           </div>
           <button type="submit" class="btn-primary" :disabled="!canSubmit || savingOrder">
             <PrinterIcon class="h-5 w-5" />
-            {{ savingOrder ? 'Menyimpan...' : 'Simpan & Buka Cetak' }}
+            {{ savingOrder ? 'Menyimpan...' : 'Simpan & Cetak Label' }}
           </button>
         </footer>
       </form>
@@ -488,35 +492,28 @@
       </template>
     </BaseModal>
 
-    <BaseModal v-model="labelPreviewOpen" :title="labelPreviewTitle" :subtitle="labelPreviewSubtitle">
-      <div class="space-y-3">
-        <div v-if="labelPreviewUrl" class="aspect-[3/4] w-full overflow-hidden rounded-xl border border-slate-200 shadow-inner">
-          <iframe :src="labelPreviewUrl" title="Pratinjau label" class="h-full w-full"></iframe>
-        </div>
-        <p v-else class="text-sm text-slate-500">Label sedang disiapkan. Silakan tunggu...</p>
-      </div>
-      <template #actions>
-        <button type="button" class="btn-secondary" @click="labelPreviewOpen = false">Tutup</button>
-        <button type="button" class="btn-primary" :disabled="!labelPreview" @click="downloadLabelPreview">
-          <PrinterIcon class="h-4 w-4" />
-          Unduh PDF
-        </button>
-      </template>
-    </BaseModal>
-
     <!-- Panel Cetak Label -->
     <WideBaseModal v-model="showLabelPanel" title="Cetak Label">
-      <LabelForm :auto-data="autoLabelData" />
-      <!-- <template #actions>
-        <button type="button" class="btn-secondary" @click="showLabelPanel = false">Tutup</button>
-      </template> -->
+      <div v-if="labelPreviewUrl" class="space-y-4">
+        <div class="aspect-[3/4] w-full overflow-hidden rounded-xl border border-slate-200 shadow-inner">
+          <iframe :src="labelPreviewUrl" title="Pratinjau label" class="h-full w-full"></iframe>
+        </div>
+        <div class="flex justify-end gap-3">
+            <button type="button" class="btn-secondary" @click="showLabelPanel = false">Tutup</button>
+            <button type="button" class="btn-primary" @click="downloadActiveLabel">
+              <ArrowDownTrayIcon class="h-5 w-5" />
+              Unduh PDF
+            </button>
+        </div>
+      </div>
+      <LabelForm v-else :auto-data="autoLabelData" @download-label="handleDownloadLabel" />
     </WideBaseModal>
   </section>
 
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { listProducts } from '../../modules/product';
 import type { Product } from '../../modules/product';
 import { listCustomers, saveCustomer } from '../../modules/customer';
@@ -545,6 +542,7 @@ import {
   TrashIcon,
   TruckIcon
 } from '@heroicons/vue/24/outline';
+import { generateLabelsPdf, generateSingleLabelPdf } from '../../modules/label';
 
 type OrderFormItem = UiOrderItem & { unitPriceDisplay: string; discountDisplay: string };
 
@@ -560,14 +558,15 @@ const savingOrder = ref(false);
 const labelBusy = ref<string | null>(null);
 const orderDetailOpen = ref(false);
 const activeOrder = ref<Order | null>(null);
-const labelPreviewOpen = ref(false);
-const labelPreview = ref<{ order: Order; base64: string } | null>(null);
-const labelPreviewUrl = ref('');
 const autoLabelData = ref<any>(null);
 const toast = useToastStore();
 
 const shippingCostDisplay = ref('');
 const orderDiscountDisplay = ref('');
+const isBuyerPayingShipping = ref(false);
+const labelPreviewUrl = ref('');
+const activeLabelOrder = ref<Order | null>(null);
+
 const contactModeButtonClasses =
   'inline-flex items-center justify-center rounded-full px-3 py-1 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60';
 const contactModeActiveClasses = 'bg-white text-primary shadow-sm';
@@ -724,7 +723,8 @@ const totalCost = computed(() =>
 const orderTotal = computed(() => subtotal.value - form.discount + form.shippingCost);
 
 const estimatedProfit = computed(() => {
-  const value = subtotal.value - form.discount - totalCost.value - form.shippingCost;
+  const shippingCostToSubtract = isBuyerPayingShipping.value ? 0 : form.shippingCost;
+  const value = subtotal.value - form.discount - totalCost.value - shippingCostToSubtract;
   return value < 0 ? 0 : value;
 });
 
@@ -875,9 +875,6 @@ const activeOrderBuyer = computed(() => (activeOrder.value ? customerMap.value.g
 const activeOrderRecipient = computed(() =>
   activeOrder.value ? customerMap.value.get(activeOrder.value.recipientId) : undefined
 );
-
-const labelPreviewTitle = 'Pratinjau Label';
-const labelPreviewSubtitle = computed(() => (labelPreview.value ? `Order ${labelPreview.value.order.code}` : ''));
 
 function labelType(type: CustomerType | undefined) {
   if (!type) return 'Customer';
@@ -1132,34 +1129,6 @@ function openOrderDetail(order: Order) {
   orderDetailOpen.value = true;
 }
 
-function revokeLabelPreviewUrl() {
-  if (labelPreviewUrl.value) {
-    URL.revokeObjectURL(labelPreviewUrl.value);
-    labelPreviewUrl.value = '';
-  }
-}
-
-function showLabelPreview(order: Order, base64: string) {
-  try {
-    const blob = ensureLabelBlob(base64);
-    revokeLabelPreviewUrl();
-    labelPreview.value = { order, base64 };
-    labelPreviewUrl.value = URL.createObjectURL(blob);
-    labelPreviewOpen.value = true;
-  } catch (error) {
-    console.error(error);
-    toast.push('Label tidak dapat ditampilkan.', 'error');
-  }
-}
-
-function downloadLabelPreview() {
-  if (!labelPreview.value) {
-    return;
-  }
-  downloadLabel(labelPreview.value.order, labelPreview.value.base64);
-  toast.push(`Label ${labelPreview.value.order.code} diunduh.`, 'success');
-}
-
 async function loadInitial() {
   try {
     const [cust, prod, logistic] = await Promise.all([listCustomers(), listProducts(), listCouriers()]);
@@ -1225,6 +1194,7 @@ function resetForm() {
   recipientMode.value = 'existing';
   resetManualContact(buyerCustom);
   resetManualContact(recipientCustom);
+  isBuyerPayingShipping.value = false;
 }
 
 function resetOrderFilters() {
@@ -1277,29 +1247,71 @@ async function submitOrder() {
     return;
   }
 
-  try {
-    labelBusy.value = createdOrder.id;
-    const pdf = await generateLabel(createdOrder.id);
-    showLabelPreview(createdOrder, pdf);
-    toast.push('Order tersimpan. Pratinjau label siap diunduh.', 'success', { timeout: 5000 });
-  } catch (error) {
-    console.error(error);
-    toast.push(
-      'Order tersimpan, tetapi label gagal dibuat. Gunakan tombol Label PDF di histori order.',
-      'info',
-      { timeout: 6000 }
-    );
-  } finally {
-    labelBusy.value = null;
-    if (createdOrder) { showLabelPanel.value = true; nextTick(() => { autoLabelData.value = buildAutoLabelData(createdOrder) as any; }); }
+  if (createdOrder) {
+    toast.push('Order tersimpan. Menyiapkan pratinjau label...', 'success');
+    try {
+
+      const pdfBase64 = await generateLabel(createdOrder.id);
+      const blob = ensureLabelBlob(pdfBase64);
+      
+      if (labelPreviewUrl.value) {
+        URL.revokeObjectURL(labelPreviewUrl.value);
+      }
+      
+      labelPreviewUrl.value = URL.createObjectURL(blob);
+      activeLabelOrder.value = createdOrder;
+      showLabelPanel.value = true;
+    } catch (error) {
+      console.error(error);
+      toast.push('Order tersimpan, tapi pratinjau label gagal dibuat.', 'error');
+    } finally {
+      labelBusy.value = null;
+    }
   }
 
   await Promise.all([loadOrders(), loadInitial()]);
 }
 
 async function printLabel(order: Order) {
+  if (labelPreviewUrl.value) {
+    URL.revokeObjectURL(labelPreviewUrl.value);
+    labelPreviewUrl.value = '';
+  }
+  activeLabelOrder.value = null;
   showLabelPanel.value = true;
-  nextTick(() => { autoLabelData.value = buildAutoLabelData(order) as any; });
+  nextTick(() => {
+    autoLabelData.value = buildAutoLabelData(order) as any;
+  });
+}
+
+async function downloadActiveLabel() {
+  if (!activeLabelOrder.value) return;
+  await handleDownloadLabel(activeLabelOrder.value.id);
+}
+
+async function handleDownloadLabel(orderId: string) {
+  if (!orderId) {
+    toast.push('ID Order tidak ditemukan.', 'error');
+    return;
+  }
+  const order = orders.value.find(o => o.id === orderId) || activeLabelOrder.value;
+  if (!order) {
+    toast.push('Order tidak ditemukan untuk diunduh.', 'error');
+    return;
+  }
+
+  if (labelBusy.value) return;
+  try {
+    labelBusy.value = order.id;
+    const pdfBase64 = await generateLabel(order.id);
+    downloadLabel(order, pdfBase64);
+    toast.push(`Label untuk order ${order.code} telah diunduh.`, 'success');
+  } catch (error) {
+    console.error(error);
+    toast.push('Gagal mengunduh label.', 'error');
+  } finally {
+    labelBusy.value = null;
+  }
 }
 
 function loadOrderIntoForm(order: Order) {
@@ -1331,6 +1343,7 @@ function loadOrderIntoForm(order: Order) {
   recipientMode.value = 'existing';
   resetManualContact(buyerCustom);
   resetManualContact(recipientCustom);
+  isBuyerPayingShipping.value = false;
   toast.push(`Form diisi ulang dari order ${order.code}. Periksa sebelum menyimpan.`, 'info', { timeout: 6000 });
 }
 
@@ -1383,13 +1396,6 @@ watch(recipientMode, (mode) => {
   }
 });
 
-watch(labelPreviewOpen, (open) => {
-  if (!open) {
-    revokeLabelPreviewUrl();
-    labelPreview.value = null;
-  }
-});
-
 watch(orderDateStart, (value) => {
   if (value && orderDateEnd.value && value > orderDateEnd.value) {
     orderDateEnd.value = value;
@@ -1409,6 +1415,7 @@ function buildAutoLabelData(order?: Order | null) {
   const buyer = customers.value.find(c => c.id === (order?.buyerId || form?.buyerId));
   const recipient = customers.value.find(c => c.id === (order?.recipientId || form?.recipientId));
   return {
+    orderId: order?.id || '',
     senderName: buyer?.name || '',
     senderPhone: buyer?.phone || '',
     senderAddress: buyer?.address || '',
@@ -1423,16 +1430,16 @@ function buildAutoLabelData(order?: Order | null) {
   };
 }
 
-onBeforeUnmount(() => {
-  revokeLabelPreviewUrl();
-});
-
-
-watch(showLabelPanel, (val) => {
-  if (val) {
+watch(showLabelPanel, (isOpen) => {
+  if (isOpen) {
     document.body.classList.add("overflow-hidden");
   } else {
     document.body.classList.remove("overflow-hidden");
+    if (labelPreviewUrl.value) {
+      URL.revokeObjectURL(labelPreviewUrl.value);
+      labelPreviewUrl.value = '';
+    }
+    activeLabelOrder.value = null;
   }
 });
 </script>
