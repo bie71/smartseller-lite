@@ -56,6 +56,10 @@ func (a *API) CreateOrder(ctx context.Context, payload service.CreateOrderInput)
 	return a.core.OrderService.Create(ctx, payload)
 }
 
+func (a *API) DeleteOrder(ctx context.Context, id string) error {
+	return a.core.OrderService.Delete(ctx, id)
+}
+
 func (a *API) GenerateLabel(ctx context.Context, orderID string) (string, error) {
 	pdfBytes, err := a.core.OrderService.GenerateLabelPDF(ctx, orderID)
 	if err != nil {

@@ -151,6 +151,34 @@ func (r *OrderRepository) Get(ctx context.Context, id string) (*domain.Order, er
 	return &o, nil
 }
 
+func (r *OrderRepository) Delete(ctx context.Context, id string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	if _, err = tx.ExecContext(ctx, `DELETE FROM order_items WHERE order_id = ?;`, id); err != nil {
+		return fmt.Errorf("delete order items: %w", err)
+	}
+
+	if _, err = tx.ExecContext(ctx, `DELETE FROM orders WHERE id = ?;`, id); err != nil {
+		return fmt.Errorf("delete order: %w", err)
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("commit delete order: %w", err)
+	}
+
+	return nil
+}
+
+
 func (r *OrderRepository) itemsByOrder(ctx context.Context, orderID string) ([]domain.OrderItem, error) {
 	const stmt = `SELECT i.id, i.order_id, i.product_id, p.sku, i.quantity, i.unit_price, i.discount, i.cost_price, i.profit
                 FROM order_items i

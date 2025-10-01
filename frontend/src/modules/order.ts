@@ -1,4 +1,4 @@
-import { getJson, postJson } from './http';
+import { deleteJson, getJson, postJson } from './http';
 import type { Customer } from './customer';
 import type { Product } from './product';
 
@@ -111,7 +111,7 @@ function adaptOrder(order: ApiOrder): Order {
   };
 }
 
-export async function listOrders(limit = 50): Promise<Order[]> {
+export async function listOrders(limit?: number): Promise<Order[]> {
   const searchParams = new URLSearchParams();
   if (limit) {
     searchParams.set('limit', String(limit));
@@ -125,6 +125,10 @@ export async function listOrders(limit = 50): Promise<Order[]> {
 export async function createOrder(payload: CreateOrderPayload): Promise<Order> {
   const order = await postJson<ApiOrder>('/orders', payload);
   return adaptOrder(order);
+}
+
+export async function deleteOrder(orderId: string): Promise<void> {
+  await deleteJson(`/orders/${orderId}`);
 }
 
 export async function generateLabel(orderId: string): Promise<string> {

@@ -155,6 +155,7 @@ func mountAPI(r chi.Router, api *app.API) {
 
 		router.Get("/orders", handleListOrders(api))
 		router.Post("/orders", handleCreateOrder(api))
+		router.Delete("/orders/{id}", handleDeleteOrder(api))
 		router.Post("/orders/{id}/label", handleGenerateLabel(api))
 		router.Get("/orders/export.csv", handleExportOrdersCSV(api))
 
@@ -348,6 +349,17 @@ func handleCreateOrder(api *app.API) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusCreated, created)
+	}
+}
+
+func handleDeleteOrder(api *app.API) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		if err := api.DeleteOrder(r.Context(), id); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		writeJSON(w, http.StatusNoContent, nil)
 	}
 }
 

@@ -182,6 +182,13 @@ func (s *OrderService) Get(ctx context.Context, id string) (*domain.Order, error
 	return s.repo.Get(ctx, id)
 }
 
+func (s *OrderService) Delete(ctx context.Context, id string) error {
+	if id == "" {
+		return errors.New("order id required")
+	}
+	return s.repo.Delete(ctx, id)
+}
+
 func (s *OrderService) ReplaceAll(ctx context.Context, orders []domain.Order) error {
 	return s.repo.ReplaceAll(ctx, orders)
 }

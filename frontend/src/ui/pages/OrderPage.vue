@@ -385,53 +385,76 @@
       </div>
       <div v-if="!orders.length" class="text-sm text-slate-500">Belum ada order.</div>
       <div v-else-if="!filteredOrders.length" class="text-sm text-slate-500">Tidak ada order yang cocok dengan pencarian.</div>
-      <div v-for="order in filteredOrders" :key="order.id" class="border border-slate-200 rounded-lg p-4 space-y-3">
-        <div class="flex items-center justify-between">
-          <div>
-            <h4 class="font-semibold">{{ order.code }}</h4>
-            <p class="text-xs text-slate-500">
-              {{ formatDate(order.createdAt) }} · {{ order.shipment.courier }} ({{ order.shipment.serviceLevel || 'N/A' }})
-            </p>
-            <p class="text-xs text-slate-400" v-if="orderParticipants(order)">
-              {{ orderParticipants(order) }}
-            </p>
+      <template v-else>
+        <div v-for="order in paginatedOrders" :key="order.id" class="border-t border-slate-200 p-4 space-y-3 first:border-t-0">
+          <div class="flex items-center justify-between">
+            <div>
+              <h4 class="font-semibold">{{ order.code }}</h4>
+              <p class="text-xs text-slate-500">
+                {{ formatDate(order.createdAt) }} · {{ order.shipment.courier }} ({{ order.shipment.serviceLevel || 'N/A' }})
+              </p>
+              <p class="text-xs text-slate-400" v-if="orderParticipants(order)">
+                {{ orderParticipants(order) }}
+              </p>
+            </div>
+            <div class="flex flex-col gap-2 sm:flex-row">
+              <button
+                type="button"
+                class="btn-secondary text-xs"
+                @click="openOrderDetail(order)"
+              >
+                <InformationCircleIcon class="h-4 w-4" />
+                Detail
+              </button>
+              <button
+                type="button"
+                class="btn-ghost text-xs"
+                @click="loadOrderIntoForm(order)"
+              >
+                <ArrowUturnLeftIcon class="h-4 w-4" />
+                Muat ke Form
+              </button>
+              <button
+                class="btn-secondary text-xs"
+                :disabled="labelBusy === order.id"
+                @click="printLabel(order)"
+              >
+                <PrinterIcon class="h-4 w-4" />
+                {{ labelBusy === order.id ? 'Menyiapkan...' : 'Label PDF' }}
+              </button>
+              <button class="btn-secondary text-xs text-red-600 hover:border-red-700 hover:bg-red-50" @click="deleteOrderAction(order)">
+                  <TrashIcon class="h-4 w-4" />
+                  Hapus
+              </button>
+            </div>
           </div>
-          <div class="flex flex-col gap-2 sm:flex-row">
-            <button
-              type="button"
-              class="btn-secondary text-xs"
-              @click="openOrderDetail(order)"
-            >
-              <InformationCircleIcon class="h-4 w-4" />
-              Detail
-            </button>
-            <button
-              type="button"
-              class="btn-ghost text-xs"
-              @click="loadOrderIntoForm(order)"
-            >
-              <ArrowUturnLeftIcon class="h-4 w-4" />
-              Muat ke Form
-            </button>
-            <button
-              class="btn-secondary text-xs"
-              :disabled="labelBusy === order.id"
-              @click="printLabel(order)"
-            >
-              <PrinterIcon class="h-4 w-4" />
-              {{ labelBusy === order.id ? 'Menyiapkan...' : 'Label PDF' }}
-            </button>
+          <ul class="text-sm text-slate-600 list-disc list-inside">
+            <li v-for="item in order.items" :key="item.id">
+              {{ productName(item.productId) }} × {{ item.quantity }} @ Rp {{ formatCurrency(item.unitPrice) }}
+            </li>
+          </ul>
+          <div class="text-sm text-slate-500">
+            Total Rp {{ formatCurrency(order.total) }} · Profit Rp {{ formatCurrency(order.profit) }}
           </div>
         </div>
-        <ul class="text-sm text-slate-600 list-disc list-inside">
-          <li v-for="item in order.items" :key="item.id">
-            {{ productName(item.productId) }} × {{ item.quantity }} @ Rp {{ formatCurrency(item.unitPrice) }}
-          </li>
-        </ul>
-        <div class="text-sm text-slate-500">
-          Total Rp {{ formatCurrency(order.total) }} · Profit Rp {{ formatCurrency(order.profit) }}
-        </div>
-      </div>
+        <footer
+          v-if="filteredOrders.length > orderPageSize"
+          class="flex flex-col gap-3 border-t border-slate-100 p-4 text-sm text-slate-500 md:flex-row md:items-center md:justify-between"
+        >
+          <span>{{ orderRangeLabel }}</span>
+          <div class="flex items-center gap-3">
+            <span>Halaman {{ orderPage }} / {{ totalOrderPages }}</span>
+            <div class="flex items-center gap-2">
+              <button type="button" :class="paginationButtonClasses" :disabled="orderPage === 1" @click="previousOrderPage">
+                <ChevronLeftIcon class="h-4 w-4" />
+              </button>
+              <button type="button" :class="paginationButtonClasses" :disabled="orderPage === totalOrderPages" @click="nextOrderPage">
+                <ChevronRightIcon class="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </footer>
+      </template>
     </div>
     <BaseModal v-model="orderDetailOpen" title="Detail Order">
       <div v-if="activeOrder" class="space-y-4 text-sm text-slate-600">
@@ -518,7 +541,7 @@ import { listProducts } from '../../modules/product';
 import type { Product } from '../../modules/product';
 import { listCustomers, saveCustomer } from '../../modules/customer';
 import type { Customer, CustomerType } from '../../modules/customer';
-import { createOrder, downloadLabel, listOrders, type Order, type UiOrderItem } from '../../modules/order';
+import { createOrder, deleteOrder, downloadLabel, listOrders, type Order, type UiOrderItem } from '../../modules/order';
 import { generateSingleLabelPdf, type LabelData } from '../../modules/label';
 import { fetchOrdersCsv } from '../../modules/reports';
 import { getSettings, listCouriers, type AppSettings, type Courier } from '../../modules/settings';
@@ -532,6 +555,8 @@ import {
   ArrowUturnLeftIcon,
   BanknotesIcon,
   ChartBarIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
   ClipboardDocumentListIcon,
   InformationCircleIcon,
   LinkIcon,
@@ -566,6 +591,11 @@ const orderDiscountDisplay = ref('');
 const isBuyerPayingShipping = ref(false);
 const labelPreviewUrl = ref('');
 const activeLabelOrder = ref<Order | null>(null);
+
+const orderPage = ref(1);
+const orderPageSize = 5;
+const paginationButtonClasses =
+  'inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-primary/40 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40';
 
 const contactModeButtonClasses =
   'inline-flex items-center justify-center rounded-full px-3 py-1 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60';
@@ -813,6 +843,22 @@ const filteredOrders = computed(() => {
         .some((field) => (field as string).toLowerCase().includes(query)) || productMatches
     );
   });
+});
+
+const totalOrderPages = computed(() => (filteredOrders.value.length > 0 ? Math.ceil(filteredOrders.value.length / orderPageSize) : 1));
+
+const paginatedOrders = computed(() => {
+    return filteredOrders.value.slice((orderPage.value - 1) * orderPageSize, orderPage.value * orderPageSize);
+});
+
+const orderRangeLabel = computed(() => {
+  if (!filteredOrders.value.length) {
+    return 'Menampilkan 0 dari 0 order';
+  }
+  const start = (orderPage.value - 1) * orderPageSize;
+  const from = start + 1;
+  const to = Math.min(start + orderPageSize, filteredOrders.value.length);
+  return `Menampilkan ${from}-${to} dari ${filteredOrders.value.length} order`;
 });
 
 const hasOrderFilters = computed(
@@ -1147,7 +1193,7 @@ async function loadInitial() {
 
 async function loadOrders() {
   try {
-    orders.value = await listOrders(50);
+    orders.value = await listOrders();
   } catch (error) {
     console.error(error);
     toast.push('Gagal memuat histori order.', 'error');
@@ -1306,6 +1352,21 @@ async function printLabel(order: Order) {
   });
 }
 
+async function deleteOrderAction(order: Order) {
+    if (!order.id) return;
+    const confirmed = window.confirm(`Hapus order ${order.code}? Tindakan ini tidak bisa dibatalkan.`);
+    if (!confirmed) return;
+
+    try {
+        await deleteOrder(order.id);
+        orders.value = orders.value.filter(o => o.id !== order.id);
+        toast.push(`Order ${order.code} telah dihapus.`, 'success');
+    } catch (error) {
+        console.error(error);
+        toast.push('Gagal menghapus order.', 'error');
+    }
+}
+
 async function downloadActiveLabel() {
   if (!activeLabelOrder.value) return;
   if (labelBusy.value) return;
@@ -1432,6 +1493,18 @@ function loadOrderIntoForm(order: Order) {
   toast.push(`Form diisi ulang dari order ${order.code}. Periksa sebelum menyimpan.`, 'info', { timeout: 6000 });
 }
 
+function previousOrderPage() {
+  if (orderPage.value > 1) {
+    orderPage.value -= 1;
+  }
+}
+
+function nextOrderPage() {
+  if (orderPage.value < totalOrderPages.value) {
+    orderPage.value += 1;
+  }
+}
+
 onMounted(async () => {
   await loadInitial();
   await loadOrders();
@@ -1479,6 +1552,10 @@ watch(recipientMode, (mode) => {
     form.recipientId = '';
     resetManualContact(recipientCustom);
   }
+});
+
+watch(orderFilterChips, () => {
+  orderPage.value = 1;
 });
 
 watch(orderDateStart, (value) => {
