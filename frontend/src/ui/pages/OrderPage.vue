@@ -483,9 +483,9 @@
           {{ activeOrder.notes }}
         </div>
       </div>
-      <!-- <template #actions>
+      <template #actions>
         <button type="button" class="btn-secondary" @click="orderDetailOpen = false">Tutup</button>
-      </template> -->
+      </template>
     </BaseModal>
 
     <BaseModal v-model="labelPreviewOpen" :title="labelPreviewTitle" :subtitle="labelPreviewSubtitle">
