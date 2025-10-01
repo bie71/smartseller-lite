@@ -82,7 +82,10 @@
         <div class="card">
       <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <h3 class="text-lg font-semibold">Daftar Kontak</h3>
-        <div v-if="customers.length" class="flex flex-wrap items-center gap-3 text-sm text-slate-500 md:justify-end">
+        <div
+          v-if="customersTotal"
+          class="flex flex-wrap items-center gap-3 text-sm text-slate-500 md:justify-end"
+        >
           <span>{{ customerRangeLabel }}</span>
           <span>Halaman {{ page }} / {{ totalPages }}</span>
           <button type="button" class="btn-ghost text-xs" @click="customerModalOpen = true">
@@ -90,60 +93,73 @@
           </button>
         </div>
       </div>
-      <div class="grid gap-4 md:grid-cols-2">
-        <article
-          v-for="customer in paginatedCustomers"
-          :key="customer.id"
-          class="border border-slate-200 rounded-lg p-4 flex flex-col gap-2"
-        >
-          <header class="flex items-start justify-between gap-3">
-            <div>
-              <h4 class="font-semibold">{{ customer.name }}</h4>
-              <span class="text-xs uppercase tracking-wide text-primary">{{ labelType(customer.type) }}</span>
-            </div>
-            <div class="flex gap-2">
-              <button type="button" class="btn-ghost text-xs" @click="openCustomerDetail(customer)">
-                Detail
-              </button>
-              <button class="btn-secondary text-xs" @click="editCustomer(customer)">
-                <PencilSquareIcon class="h-4 w-4" />
-                Edit
-              </button>
-            </div>
-          </header>
-          <p v-if="customer.address" class="text-sm text-slate-600 flex items-start gap-2">
-            <MapPinIcon class="h-4 w-4 text-primary mt-1" />
-            <span>{{ customer.address }}</span>
-          </p>
-          <p class="text-sm text-slate-500 flex items-center gap-2">
-            <MapPinIcon class="h-4 w-4 text-primary" />
-            <span>{{ customer.city }} {{ customer.province }} {{ customer.postal }}</span>
-          </p>
-          <p v-if="customer.phone" class="text-sm flex items-center gap-2">
-            <PhoneIcon class="h-4 w-4 text-primary" />
-            <span>{{ customer.phone }}</span>
-          </p>
-          <p v-if="customer.email" class="text-sm flex items-center gap-2">
-            <EnvelopeIcon class="h-4 w-4 text-primary" />
-            <span>{{ customer.email }}</span>
-          </p>
-          <p v-if="customer.notes" class="text-xs text-slate-500">Catatan: {{ customer.notes }}</p>
-        </article>
+      <div v-if="customersLoading" class="py-6 text-center text-sm text-slate-500">Memuat kontak...</div>
+      <div
+        v-else-if="customersError"
+        class="space-y-3 rounded-lg border border-red-100 bg-red-50 p-4 text-sm text-red-600"
+      >
+        <p>{{ customersError }}</p>
+        <button type="button" class="btn-secondary text-xs" @click="loadCustomers">Coba lagi</button>
       </div>
-      <p v-if="!customers.length" class="text-center text-sm text-slate-500">Belum ada customer.</p>
-      <footer v-else class="mt-4 flex flex-col gap-3 border-t border-slate-100 pt-4 text-sm text-slate-500 md:flex-row md:items-center md:justify-between">
-        <span>{{ customerRangeLabel }}</span>
-        <div class="flex items-center gap-3">
-          <div class="flex items-center gap-2">
-            <button type="button" :class="paginationButtonClasses" :disabled="page === 1" @click="previousPage">
-              <ChevronLeftIcon class="h-4 w-4" />
-            </button>
-            <button type="button" :class="paginationButtonClasses" :disabled="page === totalPages" @click="nextPage">
-              <ChevronRightIcon class="h-4 w-4" />
-            </button>
-          </div>
+      <template v-else>
+        <div class="grid gap-4 md:grid-cols-2">
+          <article
+            v-for="customer in paginatedCustomers"
+            :key="customer.id"
+            class="border border-slate-200 rounded-lg p-4 flex flex-col gap-2"
+          >
+            <header class="flex items-start justify-between gap-3">
+              <div>
+                <h4 class="font-semibold">{{ customer.name }}</h4>
+                <span class="text-xs uppercase tracking-wide text-primary">{{ labelType(customer.type) }}</span>
+              </div>
+              <div class="flex gap-2">
+                <button type="button" class="btn-ghost text-xs" @click="openCustomerDetail(customer)">
+                  Detail
+                </button>
+                <button class="btn-secondary text-xs" @click="editCustomer(customer)">
+                  <PencilSquareIcon class="h-4 w-4" />
+                  Edit
+                </button>
+              </div>
+            </header>
+            <p v-if="customer.address" class="text-sm text-slate-600 flex items-start gap-2">
+              <MapPinIcon class="h-4 w-4 text-primary mt-1" />
+              <span>{{ customer.address }}</span>
+            </p>
+            <p class="text-sm text-slate-500 flex items-center gap-2">
+              <MapPinIcon class="h-4 w-4 text-primary" />
+              <span>{{ customer.city }} {{ customer.province }} {{ customer.postal }}</span>
+            </p>
+            <p v-if="customer.phone" class="text-sm flex items-center gap-2">
+              <PhoneIcon class="h-4 w-4 text-primary" />
+              <span>{{ customer.phone }}</span>
+            </p>
+            <p v-if="customer.email" class="text-sm flex items-center gap-2">
+              <EnvelopeIcon class="h-4 w-4 text-primary" />
+              <span>{{ customer.email }}</span>
+            </p>
+            <p v-if="customer.notes" class="text-xs text-slate-500">Catatan: {{ customer.notes }}</p>
+          </article>
         </div>
-      </footer>
+        <p v-if="!paginatedCustomers.length" class="text-center text-sm text-slate-500">Belum ada customer.</p>
+        <footer
+          v-else
+          class="mt-4 flex flex-col gap-3 border-t border-slate-100 pt-4 text-sm text-slate-500 md:flex-row md:items-center md:justify-between"
+        >
+          <span>{{ customerRangeLabel }}</span>
+          <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2">
+              <button type="button" :class="paginationButtonClasses" :disabled="page === 1" @click="previousPage">
+                <ChevronLeftIcon class="h-4 w-4" />
+              </button>
+              <button type="button" :class="paginationButtonClasses" :disabled="page === totalPages" @click="nextPage">
+                <ChevronRightIcon class="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </footer>
+      </template>
         </div>
       </div>
     </div>
@@ -160,39 +176,52 @@
           />
         </div>
         <div class="max-h-[60vh] space-y-3">
-          <article
-            v-for="customer in customerModalItems"
-            :key="customer.id"
-            class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+          <div v-if="customerModalLoading" class="py-6 text-center text-sm text-slate-500">Memuat kontak...</div>
+          <div
+            v-else-if="customerModalError"
+            class="space-y-3 rounded-lg border border-red-100 bg-red-50 p-4 text-sm text-red-600"
           >
-            <header class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h4 class="text-base font-semibold">{{ customer.name }}</h4>
-                <span class="text-xs uppercase tracking-wide text-primary">{{ labelType(customer.type) }}</span>
-              </div>
-              <div class="text-sm text-slate-500 flex flex-wrap gap-3">
-                <span v-if="customer.phone" class="flex items-center gap-1">
-                  <PhoneIcon class="h-4 w-4 text-primary" />
-                  {{ customer.phone }}
-                </span>
-                <span v-if="customer.email" class="flex items-center gap-1">
-                  <EnvelopeIcon class="h-4 w-4 text-primary" />
-                  {{ customer.email }}
-                </span>
-              </div>
-            </header>
-            <p v-if="customer.address" class="mt-2 text-sm text-slate-600 flex items-start gap-2">
-              <MapPinIcon class="h-4 w-4 text-primary mt-1" />
-              <span>{{ customer.address }}</span>
+            <p>{{ customerModalError }}</p>
+            <button type="button" class="btn-secondary text-xs" @click="loadCustomerModal">Coba lagi</button>
+          </div>
+          <template v-else>
+            <article
+              v-for="customer in customerModalItems"
+              :key="customer.id"
+              class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+            >
+              <header class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h4 class="text-base font-semibold">{{ customer.name }}</h4>
+                  <span class="text-xs uppercase tracking-wide text-primary">{{ labelType(customer.type) }}</span>
+                </div>
+                <div class="text-sm text-slate-500 flex flex-wrap gap-3">
+                  <span v-if="customer.phone" class="flex items-center gap-1">
+                    <PhoneIcon class="h-4 w-4 text-primary" />
+                    {{ customer.phone }}
+                  </span>
+                  <span v-if="customer.email" class="flex items-center gap-1">
+                    <EnvelopeIcon class="h-4 w-4 text-primary" />
+                    {{ customer.email }}
+                  </span>
+                </div>
+              </header>
+              <p v-if="customer.address" class="mt-2 text-sm text-slate-600 flex items-start gap-2">
+                <MapPinIcon class="h-4 w-4 text-primary mt-1" />
+                <span>{{ customer.address }}</span>
+              </p>
+              <p class="text-xs text-slate-500">{{ customer.city }} {{ customer.province }} {{ customer.postal }}</p>
+              <p v-if="customer.notes" class="text-xs text-slate-500">Catatan: {{ customer.notes }}</p>
+            </article>
+            <p v-if="!customerModalItems.length" class="text-center text-sm text-slate-500">
+              Tidak ada kontak yang cocok dengan pencarian.
             </p>
-            <p class="text-xs text-slate-500">{{ customer.city }} {{ customer.province }} {{ customer.postal }}</p>
-            <p v-if="customer.notes" class="text-xs text-slate-500">Catatan: {{ customer.notes }}</p>
-          </article>
-          <p v-if="!customerModalFiltered.length" class="text-center text-sm text-slate-500">
-            Tidak ada kontak yang cocok dengan pencarian.
-          </p>
+          </template>
         </div>
-        <div v-if="customerModalFiltered.length" class="flex flex-col gap-3 border-t border-slate-100 pt-4 text-sm text-slate-500 md:flex-row md:items-center md:justify-between">
+        <div
+          v-if="customerModalTotal && !customerModalLoading && !customerModalError"
+          class="flex flex-col gap-3 border-t border-slate-100 pt-4 text-sm text-slate-500 md:flex-row md:items-center md:justify-between"
+        >
           <span>{{ customerModalRangeLabel }}</span>
           <div class="flex items-center gap-2">
             <button type="button" :class="paginationButtonClasses" :disabled="customerModalPage === 1" @click="previousModalPage">
@@ -303,6 +332,11 @@ const customerTypes: Array<{ value: CustomerType; label: string }> = [
 ];
 
 const customers = ref<Customer[]>([]);
+const customersTotal = ref(0);
+const customerCounts = ref<Record<CustomerType, number>>({ customer: 0, marketer: 0, reseller: 0 });
+const customersLoading = ref(false);
+const customersError = ref('');
+
 const editing = ref(false);
 const page = ref(1);
 const pageSize = 6;
@@ -313,6 +347,10 @@ const customerModalOpen = ref(false);
 const customerModalSearch = ref('');
 const customerModalPage = ref(1);
 const customerModalPageSize = 10;
+const customerModalItems = ref<Customer[]>([]);
+const customerModalTotal = ref(0);
+const customerModalLoading = ref(false);
+const customerModalError = ref('');
 const customerDetailOpen = ref(false);
 const activeCustomer = ref<Customer | null>(null);
 
@@ -332,69 +370,33 @@ const form = reactive<Customer>({
   notes: ''
 });
 
-const counts = computed(() => {
-  return customers.value.reduce(
-    (acc, customer) => {
-      const key = (customer.type || 'customer') as CustomerType;
-      acc[key] += 1;
-      return acc;
-    },
-    { customer: 0, marketer: 0, reseller: 0 } as Record<CustomerType, number>
-  );
-});
+const counts = computed(() => customerCounts.value);
 
-const totalPages = computed(() => (customers.value.length ? Math.ceil(customers.value.length / pageSize) : 1));
-const paginatedCustomers = computed(() => {
-  if (!customers.value.length) {
-    return [] as Customer[];
-  }
-  const start = (page.value - 1) * pageSize;
-  return customers.value.slice(start, start + pageSize);
-});
+const totalPages = computed(() => (customersTotal.value ? Math.ceil(customersTotal.value / pageSize) : 1));
+const paginatedCustomers = computed(() => customers.value);
 
 const customerRangeLabel = computed(() => {
-  if (!customers.value.length) {
+  if (!customers.value.length || !customersTotal.value) {
     return 'Menampilkan 0 kontak';
   }
   const start = (page.value - 1) * pageSize;
   const from = start + 1;
-  const to = Math.min(start + pageSize, customers.value.length);
-  return `Menampilkan ${from}-${to} dari ${customers.value.length} kontak`;
-});
-
-const customerModalFiltered = computed(() => {
-  const query = customerModalSearch.value.trim().toLowerCase();
-  if (!query) {
-    return customers.value;
-  }
-  return customers.value.filter((customer) => {
-    return [customer.name, customer.email, customer.phone, customer.city, customer.province]
-      .filter(Boolean)
-      .some((field) => (field as string).toLowerCase().includes(query));
-  });
+  const to = Math.min(start + customers.value.length, customersTotal.value);
+  return `Menampilkan ${from}-${to} dari ${customersTotal.value} kontak`;
 });
 
 const customerModalTotalPages = computed(() =>
-  customerModalFiltered.value.length ? Math.ceil(customerModalFiltered.value.length / customerModalPageSize) : 1
+  customerModalTotal.value ? Math.ceil(customerModalTotal.value / customerModalPageSize) : 1
 );
 
-const customerModalItems = computed(() => {
-  if (!customerModalFiltered.value.length) {
-    return [] as Customer[];
-  }
-  const start = (customerModalPage.value - 1) * customerModalPageSize;
-  return customerModalFiltered.value.slice(start, start + customerModalPageSize);
-});
-
 const customerModalRangeLabel = computed(() => {
-  const total = customerModalFiltered.value.length;
-  if (!total) {
+  if (!customerModalItems.value.length || !customerModalTotal.value) {
     return 'Menampilkan 0 kontak';
   }
   const start = (customerModalPage.value - 1) * customerModalPageSize;
   const from = start + 1;
-  const to = Math.min(start + customerModalPageSize, total);
-  return `Menampilkan ${from}-${to} dari ${total} kontak`;
+  const to = Math.min(start + customerModalItems.value.length, customerModalTotal.value);
+  return `Menampilkan ${from}-${to} dari ${customerModalTotal.value} kontak`;
 });
 
 const customerDetailSubtitle = computed(() => {
@@ -411,33 +413,32 @@ const customerDetailSubtitle = computed(() => {
   return parts.length ? parts.join(', ') : 'Kontak tersimpan dalam database';
 });
 
-watch(customers, () => {
-  if (!customers.value.length) {
-    page.value = 1;
-    customerModalPage.value = 1;
-    return;
-  }
-  if (page.value > totalPages.value) {
-    page.value = totalPages.value;
-  }
-  if (customerModalPage.value > customerModalTotalPages.value) {
-    customerModalPage.value = customerModalTotalPages.value;
-  }
-});
-
-watch(
-  () => customerModalFiltered.value.length,
-  () => {
-    if (customerModalPage.value > customerModalTotalPages.value) {
-      customerModalPage.value = customerModalTotalPages.value;
-    }
-  }
-);
-
 watch(customerModalOpen, (open) => {
   if (open) {
     customerModalSearch.value = '';
     customerModalPage.value = 1;
+    void loadCustomerModal();
+  } else {
+    customerModalItems.value = [];
+    customerModalTotal.value = 0;
+    customerModalError.value = '';
+  }
+});
+
+watch(customerModalSearch, () => {
+  customerModalPage.value = 1;
+  scheduleLoadCustomerModal();
+});
+
+watch(customerModalPage, (value, oldValue) => {
+  if (value !== oldValue && customerModalOpen.value) {
+    void loadCustomerModal();
+  }
+});
+
+watch(page, (value, oldValue) => {
+  if (value !== oldValue) {
+    void loadCustomers();
   }
 });
 
@@ -446,6 +447,10 @@ watch(customerDetailOpen, (open) => {
     activeCustomer.value = null;
   }
 });
+
+let customerFetchId = 0;
+let customerModalFetchId = 0;
+let customerModalTimer: ReturnType<typeof setTimeout> | null = null;
 
 function resetForm() {
   Object.assign(form, {
@@ -464,12 +469,92 @@ function resetForm() {
 }
 
 async function loadCustomers() {
+  const requestId = ++customerFetchId;
+  customersLoading.value = true;
+  customersError.value = '';
   try {
-    customers.value = await listCustomers();
+    const response = await listCustomers({
+      page: page.value,
+      pageSize
+    });
+
+    if (requestId !== customerFetchId) {
+      return;
+    }
+
+    const totalPagesCount = Math.max(1, Math.ceil(response.total / pageSize));
+    if (page.value > totalPagesCount) {
+      page.value = totalPagesCount;
+      return;
+    }
+
+    customers.value = response.items;
+    customersTotal.value = response.total;
+    customerCounts.value = response.counts;
   } catch (error) {
     console.error(error);
-    toast.push('Gagal memuat daftar kontak.', 'error');
+    if (requestId === customerFetchId) {
+      customers.value = [];
+      customersTotal.value = 0;
+      customerCounts.value = { customer: 0, marketer: 0, reseller: 0 };
+      customersError.value = 'Gagal memuat daftar kontak.';
+      toast.push(customersError.value, 'error');
+    }
+  } finally {
+    if (requestId === customerFetchId) {
+      customersLoading.value = false;
+    }
   }
+}
+
+async function loadCustomerModal() {
+  const requestId = ++customerModalFetchId;
+  customerModalLoading.value = true;
+  customerModalError.value = '';
+  try {
+    const response = await listCustomers({
+      page: customerModalPage.value,
+      pageSize: customerModalPageSize,
+      query: customerModalSearch.value.trim() || undefined
+    });
+
+    if (requestId !== customerModalFetchId) {
+      return;
+    }
+
+    const totalPagesCount = Math.max(1, Math.ceil(response.total / customerModalPageSize));
+    if (customerModalPage.value > totalPagesCount) {
+      customerModalPage.value = totalPagesCount;
+      return;
+    }
+
+    customerModalItems.value = response.items;
+    customerModalTotal.value = response.total;
+  } catch (error) {
+    console.error(error);
+    if (requestId === customerModalFetchId) {
+      customerModalItems.value = [];
+      customerModalTotal.value = 0;
+      customerModalError.value = 'Gagal memuat daftar kontak.';
+      toast.push(customerModalError.value, 'error');
+    }
+  } finally {
+    if (requestId === customerModalFetchId) {
+      customerModalLoading.value = false;
+    }
+  }
+}
+
+function scheduleLoadCustomerModal(delay = 250) {
+  if (customerModalTimer) {
+    clearTimeout(customerModalTimer);
+  }
+  customerModalTimer = setTimeout(() => {
+    customerModalTimer = null;
+    if (customerModalOpen.value) {
+      void loadCustomerModal();
+    }
+  }, delay);
 }
 
 async function handleSubmit() {
