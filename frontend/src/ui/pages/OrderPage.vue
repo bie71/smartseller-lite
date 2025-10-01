@@ -518,9 +518,10 @@ import { listProducts } from '../../modules/product';
 import type { Product } from '../../modules/product';
 import { listCustomers, saveCustomer } from '../../modules/customer';
 import type { Customer, CustomerType } from '../../modules/customer';
-import { createOrder, downloadLabel, ensureLabelBlob, generateLabel, listOrders, type Order, type UiOrderItem } from '../../modules/order';
+import { createOrder, downloadLabel, listOrders, type Order, type UiOrderItem } from '../../modules/order';
+import { generateSingleLabelPdf, type LabelData } from '../../modules/label';
 import { fetchOrdersCsv } from '../../modules/reports';
-import { listCouriers, type Courier } from '../../modules/settings';
+import { getSettings, listCouriers, type AppSettings, type Courier } from '../../modules/settings';
 import BaseModal from '../components/BaseModal.vue';
 import WideBaseModal from '../components/WideBaseModal.vue';
 import LabelForm from '../components/LabelForm.vue';
@@ -542,7 +543,6 @@ import {
   TrashIcon,
   TruckIcon
 } from '@heroicons/vue/24/outline';
-import { generateLabelsPdf, generateSingleLabelPdf } from '../../modules/label';
 
 type OrderFormItem = UiOrderItem & { unitPriceDisplay: string; discountDisplay: string };
 
@@ -1250,9 +1250,31 @@ async function submitOrder() {
   if (createdOrder) {
     toast.push('Order tersimpan. Menyiapkan pratinjau label...', 'success');
     try {
+      labelBusy.value = createdOrder.id;
+      const appSettings = await getSettings();
+      const buyer = customerMap.value.get(createdOrder.buyerId);
+      const recipient = customerMap.value.get(createdOrder.recipientId);
 
-      const pdfBase64 = await generateLabel(createdOrder.id);
-      const blob = ensureLabelBlob(pdfBase64);
+      if (!buyer || !recipient) {
+        throw new Error('Data pemesan atau penerima tidak lengkap');
+      }
+
+      const labelData: LabelData = {
+        id: createdOrder.id,
+        senderName: buyer.name,
+        senderPhone: buyer.phone,
+        senderAddress: buyer.address,
+        recipientName: recipient.name,
+        recipientPhone: recipient.phone,
+        recipientAddress: recipient.address,
+        courier: createdOrder.shipment.courier,
+        service: createdOrder.shipment.serviceLevel,
+        trackingCode: createdOrder.shipment.trackingCode,
+        orderCode: createdOrder.code,
+        notes: createdOrder.notes,
+      };
+
+      const blob = await generateSingleLabelPdf(labelData, appSettings);
       
       if (labelPreviewUrl.value) {
         URL.revokeObjectURL(labelPreviewUrl.value);
@@ -1286,7 +1308,44 @@ async function printLabel(order: Order) {
 
 async function downloadActiveLabel() {
   if (!activeLabelOrder.value) return;
-  await handleDownloadLabel(activeLabelOrder.value.id);
+  if (labelBusy.value) return;
+  try {
+    labelBusy.value = activeLabelOrder.value.id;
+    const appSettings = await getSettings();
+    const buyer = customerMap.value.get(activeLabelOrder.value.buyerId);
+    const recipient = customerMap.value.get(activeLabelOrder.value.recipientId);
+    if (!buyer || !recipient) throw new Error('Data pemesan atau penerima tidak lengkap');
+
+    const labelData: LabelData = {
+      id: activeLabelOrder.value.id,
+      senderName: buyer.name,
+      senderPhone: buyer.phone,
+      senderAddress: buyer.address,
+      recipientName: recipient.name,
+      recipientPhone: recipient.phone,
+      recipientAddress: recipient.address,
+      courier: activeLabelOrder.value.shipment.courier,
+      service: activeLabelOrder.value.shipment.serviceLevel,
+      trackingCode: activeLabelOrder.value.shipment.trackingCode,
+      orderCode: activeLabelOrder.value.code,
+      notes: activeLabelOrder.value.notes,
+    };
+    const blob = await generateSingleLabelPdf(labelData, appSettings);
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `label-${activeLabelOrder.value.code}.pdf`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
+    toast.push(`Label untuk order ${activeLabelOrder.value.code} telah diunduh.`, 'success');
+  } catch (error) {
+    console.error(error);
+    toast.push('Gagal mengunduh label.', 'error');
+  } finally {
+    labelBusy.value = null;
+  }
 }
 
 async function handleDownloadLabel(orderId: string) {
@@ -1303,8 +1362,34 @@ async function handleDownloadLabel(orderId: string) {
   if (labelBusy.value) return;
   try {
     labelBusy.value = order.id;
-    const pdfBase64 = await generateLabel(order.id);
-    downloadLabel(order, pdfBase64);
+    const appSettings = await getSettings();
+    const buyer = customerMap.value.get(order.buyerId);
+    const recipient = customerMap.value.get(order.recipientId);
+    if (!buyer || !recipient) throw new Error('Data pemesan atau penerima tidak lengkap');
+
+    const labelData: LabelData = {
+      id: order.id,
+      senderName: buyer.name,
+      senderPhone: buyer.phone,
+      senderAddress: buyer.address,
+      recipientName: recipient.name,
+      recipientPhone: recipient.phone,
+      recipientAddress: recipient.address,
+      courier: order.shipment.courier,
+      service: order.shipment.serviceLevel,
+      trackingCode: order.shipment.trackingCode,
+      orderCode: order.code,
+      notes: order.notes,
+    };
+    const blob = await generateSingleLabelPdf(labelData, appSettings);
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `label-${order.code}.pdf`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
     toast.push(`Label untuk order ${order.code} telah diunduh.`, 'success');
   } catch (error) {
     console.error(error);
