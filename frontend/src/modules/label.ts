@@ -1,5 +1,3 @@
-import { jsPDF } from 'jspdf';
-import html2canvas from 'html2canvas';
 import { createApp, h } from 'vue';
 import LabelPreview from '../ui/components/LabelPreview.vue';
 import type { AppSettings } from './settings';
@@ -24,8 +22,25 @@ export type LabelData = {
 
 const MM_PER_INCH = 25.4;
 const DPI = 96;
-const PX_TO_MM = (px: number) => (px / DPI) * MM_PER_INCH;
 const CANVAS_SCALE = 2;
+
+let html2canvasLoader: Promise<typeof import('html2canvas')> | null = null;
+let jsPdfLoader: Promise<typeof import('jspdf')> | null = null;
+
+async function ensureHtml2Canvas() {
+  if (!html2canvasLoader) {
+    html2canvasLoader = import('html2canvas');
+  }
+  return html2canvasLoader;
+}
+
+async function ensureJsPdf() {
+  if (!jsPdfLoader) {
+    jsPdfLoader = import('jspdf');
+  }
+  return jsPdfLoader;
+}
+
 
 async function renderComponentToCanvas(label: LabelData, widthPx: number, appSettings: AppSettings | null): Promise<HTMLCanvasElement> {
   return new Promise((resolve, reject) => {
@@ -53,11 +68,12 @@ async function renderComponentToCanvas(label: LabelData, widthPx: number, appSet
         const el = container.querySelector<HTMLElement>(`#label-preview-${label.id}`);
         if (!el) throw new Error('Rendered element not found');
         
+        const { default: html2canvas } = await ensureHtml2Canvas();
         const canvas = await html2canvas(el, {
           scale: CANVAS_SCALE,
           useCORS: true,
           logging: false,
-          backgroundColor: null, // Use transparent background
+          backgroundColor: '#ffffff',
         });
         document.body.removeChild(container);
         app.unmount();
@@ -74,6 +90,7 @@ async function renderComponentToCanvas(label: LabelData, widthPx: number, appSet
 }
 
 export async function generateSingleLabelPdf(label: LabelData, appSettings: AppSettings | null): Promise<Blob> {
+  const { jsPDF } = await ensureJsPdf();
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 10;
@@ -83,10 +100,11 @@ export async function generateSingleLabelPdf(label: LabelData, appSettings: AppS
   const canvas = await renderComponentToCanvas(label, labelWidthPx, appSettings);
   const imgData = canvas.toDataURL('image/png');
 
-  const finalWidthMm = PX_TO_MM(canvas.width / CANVAS_SCALE);
-  const finalHeightMm = PX_TO_MM(canvas.height / CANVAS_SCALE);
+  const aspectRatio = canvas.height / canvas.width;
+  const finalWidthMm = labelWidthMm;
+  const finalHeightMm = finalWidthMm * aspectRatio;
 
-  const x = (pageWidth - finalWidthMm) / 2;
+  const x = margin;
   const y = margin;
 
   doc.addImage(imgData, 'PNG', x, y, finalWidthMm, finalHeightMm);
@@ -96,6 +114,7 @@ export async function generateSingleLabelPdf(label: LabelData, appSettings: AppS
 export async function generateLabelsPdf(labels: LabelData[], appSettings: AppSettings | null): Promise<Blob> {
   if (!labels.length) throw new Error('Tidak ada label untuk dicetak.');
 
+  const { jsPDF } = await ensureJsPdf();
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 10;
@@ -111,10 +130,11 @@ export async function generateLabelsPdf(labels: LabelData[], appSettings: AppSet
     const canvas = await renderComponentToCanvas(label, labelWidthPx, appSettings);
     const imgData = canvas.toDataURL('image/png');
 
-    const finalWidthMm = PX_TO_MM(canvas.width / CANVAS_SCALE);
-    const finalHeightMm = PX_TO_MM(canvas.height / CANVAS_SCALE);
+    const aspectRatio = canvas.height / canvas.width;
+    const finalWidthMm = labelWidthMm;
+    const finalHeightMm = finalWidthMm * aspectRatio;
 
-    const x = (pageWidth - finalWidthMm) / 2;
+    const x = margin;
     const y = margin;
 
     doc.addImage(imgData, 'PNG', x, y, finalWidthMm, finalHeightMm);

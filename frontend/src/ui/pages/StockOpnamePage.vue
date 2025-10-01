@@ -1,6 +1,8 @@
 <template>
   <section class="space-y-6">
-    <div class="card space-y-5">
+    <div class="space-y-6 xl:grid xl:grid-cols-5 xl:gap-6 xl:space-y-0">
+      <div class="space-y-6 xl:col-span-3">
+        <div class="card space-y-5 xl:sticky xl:top-28">
       <header class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div class="flex items-center gap-3">
           <div class="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600">
@@ -173,43 +175,49 @@
         </aside>
       </div>
 
-      <div class="border-t border-slate-100 pt-4">
-        <h4 class="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-600">
-          <ClockIcon class="h-4 w-4 text-primary" />
-          Riwayat Stock Opname Terakhir
-        </h4>
-        <div v-if="opnamesLoading" class="space-y-3">
-          <div
-            v-for="placeholder in 3"
-            :key="placeholder"
-            class="h-20 animate-pulse rounded-lg border border-slate-100 bg-slate-50/80"
-          ></div>
         </div>
-        <div v-else-if="!recentOpnames.length" class="text-sm text-slate-500">Belum ada stock opname tersimpan.</div>
-        <ul v-else class="space-y-3">
-          <li
-            v-for="opname in recentOpnames"
-            :key="opname.id"
-            class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
-          >
-            <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p class="font-semibold">{{ formatOpnameDate(opname.performedAt) }}</p>
-                <p class="text-xs text-slate-500">{{ opname.note || 'Tanpa catatan tambahan' }}</p>
-                <p class="text-xs text-slate-400">Petugas: {{ opname.performedBy || 'Tidak diketahui' }}</p>
-              </div>
-              <div class="flex flex-col items-start gap-2 text-xs text-slate-500 sm:flex-row sm:items-center sm:gap-3">
-                <span>
-                  {{ opname.items.length }} produk · +{{ opnameDiffLabel(opname).increase }} / -{{ opnameDiffLabel(opname).decrease }}
-                </span>
-                <button type="button" class="btn-secondary text-xs" @click="openOpnameDetail(opname)">
-                  Detail
-                </button>
-              </div>
-            </div>
-          </li>
-        </ul>
       </div>
+      <aside class="space-y-6 xl:col-span-2">
+        <div class="card space-y-4">
+          <div class="flex items-center gap-2 text-slate-600">
+            <ClockIcon class="h-5 w-5 text-primary" />
+            <h3 class="text-lg font-semibold">Riwayat Stock Opname</h3>
+          </div>
+          <div v-if="opnamesLoading" class="space-y-3">
+            <div
+              v-for="placeholder in 3"
+              :key="placeholder"
+              class="h-20 animate-pulse rounded-lg border border-slate-100 bg-slate-50/80"
+            ></div>
+          </div>
+          <p v-else-if="!recentOpnames.length" class="text-sm text-slate-500">
+            Belum ada stock opname tersimpan.
+          </p>
+          <ul v-else class="space-y-3">
+            <li
+              v-for="opname in recentOpnames"
+              :key="opname.id"
+              class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+            >
+              <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p class="font-semibold">{{ formatOpnameDate(opname.performedAt) }}</p>
+                  <p class="text-xs text-slate-500">{{ opname.note || 'Tanpa catatan tambahan' }}</p>
+                  <p class="text-xs text-slate-400">Petugas: {{ opname.performedBy || 'Tidak diketahui' }}</p>
+                </div>
+                <div class="flex flex-col items-start gap-2 text-xs text-slate-500 sm:flex-row sm:items-center sm:gap-3">
+                  <span>
+                    {{ opname.items.length }} produk · +{{ opnameDiffLabel(opname).increase }} / -{{ opnameDiffLabel(opname).decrease }}
+                  </span>
+                  <button type="button" class="btn-secondary text-xs" @click="openOpnameDetail(opname)">
+                    Detail
+                  </button>
+                </div>
+              </div>
+            </li>
+          </ul>
+        </div>
+      </aside>
     </div>
     <BaseModal
       v-model="opnameDetailOpen"

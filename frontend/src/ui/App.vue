@@ -92,7 +92,11 @@ const tabs: Array<{ id: TabId; label: string; icon: any }> = [
   { id: 'settings', label: 'Pengaturan', icon: Cog6ToothIcon }
 ];
 
-const activeTab = ref<TabId>('orders');
+const tabStorageKey = 'smartseller.activeTab';
+const storedTab = typeof window !== 'undefined' ? (localStorage.getItem(tabStorageKey) as TabId | null) : null;
+const fallbackTab: TabId = storedTab && tabs.some((tab) => tab.id === storedTab) ? storedTab : 'orders';
+
+const activeTab = ref<TabId>(fallbackTab);
 const settings = ref<AppSettings | null>(null);
 const productRefreshToken = ref(0);
 const pendingOpnameProductId = ref<string | null>(null);
@@ -156,6 +160,9 @@ function handleStockAdjusted() {
 }
 
 watch(activeTab, (tab) => {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(tabStorageKey, tab);
+  }
   if (tab !== 'stock') {
     pendingOpnameProductId.value = null;
   }

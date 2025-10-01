@@ -1,6 +1,8 @@
 <template>
   <section class="space-y-6">
-    <div class="card space-y-5">
+    <div class="space-y-6 xl:grid xl:grid-cols-5 xl:gap-6 xl:space-y-0">
+      <div class="space-y-6 xl:col-span-3">
+        <div class="card space-y-5 xl:sticky xl:top-28">
       <header class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div class="flex items-center gap-3">
           <div class="h-12 w-12 rounded-full bg-primary/10 text-primary flex items-center justify-center">
@@ -305,15 +307,16 @@
           </button>
         </footer>
       </form>
-    </div>
-
-    <div class="card space-y-5">
-      <header class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        </div>
+      </div>
+      <aside class="space-y-6 xl:col-span-2">
+        <div class="card space-y-5">
+      <header class="space-y-4">
         <div class="flex items-center gap-2">
           <ArrowPathIcon class="h-5 w-5 text-primary" />
           <h3 class="text-lg font-semibold">Histori Order</h3>
         </div>
-        <div class="flex w-full flex-col gap-3 lg:w-auto">
+        <div class="space-y-3">
           <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
             <div class="relative w-full sm:w-64">
               <MagnifyingGlassIcon class="pointer-events-none absolute left-3 top-2.5 h-5 w-5 text-slate-400" />
@@ -336,16 +339,16 @@
             <button
               v-if="hasOrderFilters"
               type="button"
-              class="btn-ghost text-xs"
+              class="inline-flex items-center rounded-lg px-3 py-1 text-xs font-medium text-slate-500 transition hover:text-primary"
               @click="resetOrderFilters"
             >
               Bersihkan filter
             </button>
-            <button class="btn-secondary text-xs" @click="exportOrders">
+            <button :class="orderHistoryButtonClasses" @click="exportOrders">
               <ArrowDownTrayIcon class="h-4 w-4" />
               Export CSV
             </button>
-            <button class="btn-secondary text-xs" @click="loadOrders">
+            <button :class="orderHistoryButtonClasses" @click="loadOrders">
               <ArrowPathIcon class="h-4 w-4" />
               Refresh
             </button>
@@ -387,46 +390,14 @@
       <div v-else-if="!filteredOrders.length" class="text-sm text-slate-500">Tidak ada order yang cocok dengan pencarian.</div>
       <template v-else>
         <div v-for="order in paginatedOrders" :key="order.id" class="border-t border-slate-200 p-4 space-y-3 first:border-t-0">
-          <div class="flex items-center justify-between">
-            <div>
-              <h4 class="font-semibold">{{ order.code }}</h4>
-              <p class="text-xs text-slate-500">
-                {{ formatDate(order.createdAt) }} · {{ order.shipment.courier }} ({{ order.shipment.serviceLevel || 'N/A' }})
-              </p>
-              <p class="text-xs text-slate-400" v-if="orderParticipants(order)">
-                {{ orderParticipants(order) }}
-              </p>
-            </div>
-            <div class="flex flex-col gap-2 sm:flex-row">
-              <button
-                type="button"
-                class="btn-secondary text-xs"
-                @click="openOrderDetail(order)"
-              >
-                <InformationCircleIcon class="h-4 w-4" />
-                Detail
-              </button>
-              <button
-                type="button"
-                class="btn-ghost text-xs"
-                @click="loadOrderIntoForm(order)"
-              >
-                <ArrowUturnLeftIcon class="h-4 w-4" />
-                Muat ke Form
-              </button>
-              <button
-                class="btn-secondary text-xs"
-                :disabled="labelBusy === order.id"
-                @click="printLabel(order)"
-              >
-                <PrinterIcon class="h-4 w-4" />
-                {{ labelBusy === order.id ? 'Menyiapkan...' : 'Label PDF' }}
-              </button>
-              <button class="btn-secondary text-xs text-red-600 hover:border-red-700 hover:bg-red-50" @click="deleteOrderAction(order)">
-                  <TrashIcon class="h-4 w-4" />
-                  Hapus
-              </button>
-            </div>
+          <div class="space-y-1">
+            <h4 class="font-semibold">{{ order.code }}</h4>
+            <p class="text-xs text-slate-500">
+              {{ formatDate(order.createdAt) }} · {{ order.shipment.courier }} ({{ order.shipment.serviceLevel || 'N/A' }})
+            </p>
+            <p class="text-xs text-slate-400" v-if="orderParticipants(order)">
+              {{ orderParticipants(order) }}
+            </p>
           </div>
           <ul class="text-sm text-slate-600 list-disc list-inside">
             <li v-for="item in order.items" :key="item.id">
@@ -435,6 +406,41 @@
           </ul>
           <div class="text-sm text-slate-500">
             Total Rp {{ formatCurrency(order.total) }} · Profit Rp {{ formatCurrency(order.profit) }}
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button
+              type="button"
+              :class="orderHistoryActionDetailClasses"
+              @click="openOrderDetail(order)"
+            >
+              <InformationCircleIcon class="h-4 w-4" />
+              Detail
+            </button>
+            <button
+              type="button"
+              :class="orderHistoryActionLoadClasses"
+              @click="loadOrderIntoForm(order)"
+            >
+              <ArrowUturnLeftIcon class="h-4 w-4" />
+              Muat ke Form
+            </button>
+            <button
+              type="button"
+              :class="orderHistoryActionPrintClasses"
+              :disabled="labelBusy === order.id"
+              @click="printLabel(order)"
+            >
+              <PrinterIcon class="h-4 w-4" />
+              {{ labelBusy === order.id ? 'Menyiapkan...' : 'Label PDF' }}
+            </button>
+            <button
+              type="button"
+              :class="orderHistoryActionDeleteClasses"
+              @click="deleteOrderAction(order)"
+            >
+              <TrashIcon class="h-4 w-4" />
+              Hapus
+            </button>
           </div>
         </div>
         <footer
@@ -455,6 +461,8 @@
           </div>
         </footer>
       </template>
+        </div>
+      </aside>
     </div>
     <BaseModal v-model="orderDetailOpen" title="Detail Order">
       <div v-if="activeOrder" class="space-y-4 text-sm text-slate-600">
@@ -596,6 +604,17 @@ const orderPage = ref(1);
 const orderPageSize = 5;
 const paginationButtonClasses =
   'inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-primary/40 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40';
+
+const orderHistoryButtonClasses =
+  'inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 transition hover:border-primary/40 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-50';
+const orderHistoryActionDetailClasses =
+  'inline-flex items-center gap-1 rounded-lg bg-sky-600 px-3 py-1 text-xs font-semibold text-white shadow-sm transition hover:bg-sky-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-sky-500';
+const orderHistoryActionLoadClasses =
+  'inline-flex items-center gap-1 rounded-lg bg-amber-500 px-3 py-1 text-xs font-semibold text-white shadow-sm transition hover:bg-amber-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-amber-500';
+const orderHistoryActionPrintClasses =
+  'inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-60';
+const orderHistoryActionDeleteClasses =
+  'inline-flex items-center gap-1 rounded-lg bg-rose-600 px-3 py-1 text-xs font-semibold text-white shadow-sm transition hover:bg-rose-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-rose-500';
 
 const contactModeButtonClasses =
   'inline-flex items-center justify-center rounded-full px-3 py-1 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60';

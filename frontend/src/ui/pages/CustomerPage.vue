@@ -1,6 +1,8 @@
 <template>
   <section class="space-y-6">
-    <div class="card space-y-5">
+    <div class="space-y-6 xl:grid xl:grid-cols-5 xl:gap-6 xl:space-y-0">
+      <aside class="space-y-6 xl:col-span-2 xl:order-1">
+        <div class="card space-y-5 xl:sticky xl:top-28">
       <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div class="flex items-center gap-3">
           <div class="h-12 w-12 rounded-full bg-primary/10 text-primary flex items-center justify-center">
@@ -11,13 +13,12 @@
             <p class="text-sm text-slate-500">Simpan detail pelanggan, marketer, dan reseller dalam satu tempat.</p>
           </div>
         </div>
-        <div class="flex flex-wrap items-center gap-3">
+        <div class="flex w-full flex-wrap items-center gap-3 md:ml-auto md:justify-end">
           <div class="flex gap-2 text-sm text-slate-500">
             <span>{{ counts.customer }} Customer</span>
             <span>{{ counts.marketer }} Marketer</span>
             <span>{{ counts.reseller }} Reseller</span>
           </div>
-          <button v-if="customers.length" type="button" class="btn-ghost" @click="customerModalOpen = true">Lihat Semua</button>
         </div>
       </div>
 
@@ -75,14 +76,18 @@
         </div>
         </div>
       </form>
-    </div>
-
-    <div class="card">
+        </div>
+      </aside>
+      <div class="space-y-6 xl:col-span-3 xl:order-2">
+        <div class="card">
       <div class="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <h3 class="text-lg font-semibold">Daftar Kontak</h3>
-        <div class="flex items-center gap-3 text-sm text-slate-500" v-if="customers.length">
+        <div v-if="customers.length" class="flex flex-wrap items-center gap-3 text-sm text-slate-500 md:justify-end">
           <span>{{ customerRangeLabel }}</span>
           <span>Halaman {{ page }} / {{ totalPages }}</span>
+          <button type="button" class="btn-ghost text-xs" @click="customerModalOpen = true">
+            Lihat Semua
+          </button>
         </div>
       </div>
       <div class="grid gap-4 md:grid-cols-2">
@@ -139,6 +144,8 @@
           </div>
         </div>
       </footer>
+        </div>
+      </div>
     </div>
 
     <BaseModal v-model="customerModalOpen" title="Seluruh Kontak">

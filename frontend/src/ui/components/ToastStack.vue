@@ -1,11 +1,11 @@
 <template>
   <teleport to="body">
-    <div class="fixed inset-x-0 top-4 z-[1000] flex flex-col items-center gap-3 px-4 sm:items-end sm:px-6">
+    <div class="pointer-events-none fixed inset-x-0 top-4 z-[1000] flex flex-col items-center gap-3 px-4 sm:items-end sm:px-6">
       <TransitionGroup name="toast">
         <article
           v-for="toast in toasts"
           :key="toast.id"
-          class="w-full max-w-sm rounded-xl border px-4 py-3 shadow-xl backdrop-blur-md"
+          class="pointer-events-auto w-full max-w-sm rounded-xl border px-4 py-3 shadow-xl backdrop-blur-md"
           :class="toneClass(toast.tone)"
         >
           <div class="flex items-start gap-3">

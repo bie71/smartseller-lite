@@ -1,6 +1,8 @@
 <template>
   <section class="space-y-6">
-    <div class="card space-y-5">
+    <div class="space-y-6 xl:grid xl:grid-cols-5 xl:gap-6 xl:space-y-0">
+      <aside class="space-y-6 xl:col-span-2 xl:order-1">
+        <div class="card space-y-5 xl:sticky xl:top-28">
       <header class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div class="flex items-center gap-3">
           <div class="h-12 w-12 rounded-full bg-primary/10 text-primary flex items-center justify-center">
@@ -10,10 +12,6 @@
             <h2 class="text-xl font-semibold">Daftar Ekspedisi</h2>
             <p class="text-sm text-slate-500">Kelola daftar ekspedisi favorit agen dan detail layanan mereka.</p>
           </div>
-        </div>
-        <div class="flex flex-wrap items-center gap-3">
-          <button class="btn-secondary text-sm" @click="loadCouriers">Refresh</button>
-          <button v-if="couriers.length" type="button" class="btn-ghost" @click="courierModalOpen = true">Lihat Semua</button>
         </div>
       </header>
 
@@ -65,9 +63,10 @@
           <button v-if="editing" type="button" class="btn-secondary" @click="resetForm">Batal</button>
         </div>
       </form>
-    </div>
-
-    <div class="card">
+        </div>
+      </aside>
+      <div class="space-y-6 xl:col-span-3 xl:order-2">
+        <div class="card">
       <div class="mb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <h3 class="text-lg font-semibold">Ekspedisi Tersimpan</h3>
@@ -94,7 +93,7 @@
             :key="courier.id"
             class="card border border-slate-200 hover:border-primary/40 transition-colors shadow-sm"
           >
-            <header class="flex items-start justify-between gap-3">
+            <header class="flex items-start gap-3">
               <div class="flex items-center gap-3">
                 <div class="h-12 w-12 overflow-hidden rounded-xl bg-primary/5">
                   <img
@@ -110,19 +109,7 @@
                   <h3 class="text-lg font-semibold">{{ courier.name }}</h3>
                 </div>
               </div>
-              <div class="flex gap-2">
-                <button class="icon-btn" @click="editCourier(courier)">
-                  <PencilSquareIcon class="h-5 w-5" />
-                </button>
-                <button class="icon-btn text-red-500 hover:text-red-600" @click="removeCourier(courier)">
-                  <TrashIcon class="h-5 w-5" />
-                </button>
-              </div>
             </header>
-            <button type="button" class="btn-secondary mt-3 w-full text-sm" @click="viewCourier(courier)">
-              <InformationCircleIcon class="h-5 w-5" />
-              Lihat Detail
-            </button>
             <dl class="mt-3 space-y-2 text-sm text-slate-600">
               <div class="flex items-center gap-2">
                 <SparklesIcon class="h-4 w-4 text-primary" />
@@ -138,6 +125,20 @@
               </div>
               <p v-if="courier.notes" class="text-xs text-slate-500">Catatan: {{ courier.notes }}</p>
             </dl>
+            <div class="mt-4 flex flex-wrap gap-2">
+              <button type="button" :class="courierActionPrimaryClasses" @click="viewCourier(courier)">
+                <InformationCircleIcon class="h-4 w-4" />
+                Lihat Detail
+              </button>
+              <button type="button" :class="courierActionNeutralClasses" @click="editCourier(courier)">
+                <PencilSquareIcon class="h-4 w-4" />
+                Edit
+              </button>
+              <button type="button" :class="courierActionDangerClasses" @click="removeCourier(courier)">
+                <TrashIcon class="h-4 w-4" />
+                Hapus
+              </button>
+            </div>
           </article>
         </template>
         <p v-else class="col-span-full text-center text-sm text-slate-500">Tidak ada ekspedisi yang cocok dengan pencarian.</p>
@@ -157,6 +158,8 @@
           </button>
         </div>
       </footer>
+        </div>
+      </div>
     </div>
 
     <BaseModal v-model="courierModalOpen" title="Semua Ekspedisi">
@@ -308,6 +311,12 @@ const page = ref(1);
 const pageSize = 6;
 const paginationButtonClasses =
   'inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-primary/40 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40';
+const courierActionPrimaryClasses =
+  'inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-primary/60';
+const courierActionNeutralClasses =
+  'inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-primary/40 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-primary/60';
+const courierActionDangerClasses =
+  'inline-flex items-center gap-1 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-rose-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-rose-400';
 
 const courierModalOpen = ref(false);
 const courierModalSearch = ref('');

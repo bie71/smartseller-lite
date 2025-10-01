@@ -1,6 +1,8 @@
 <template>
   <section class="space-y-6">
-    <div class="card space-y-6">
+    <div class="space-y-6 xl:grid xl:grid-cols-5 xl:gap-6 xl:space-y-0">
+      <aside class="space-y-6 xl:col-span-2 xl:order-1">
+        <div class="card space-y-6 xl:sticky xl:top-28">
       <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div class="flex items-center gap-3">
           <div class="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -27,9 +29,6 @@
             <ExclamationTriangleIcon class="h-4 w-4" />
             {{ warningStockCount }} stok menipis
           </span>
-          <button v-if="products.length" type="button" class="btn-ghost" @click="productModalOpen = true">
-            Lihat Semua
-          </button>
         </div>
       </div>
 
@@ -99,24 +98,24 @@
           <input v-model.number="form.lowStockThreshold" type="number" min="1" class="input mt-1" />
           <p class="mt-1 text-xs text-slate-400">Notifikasi stok muncul jika jumlah ≤ nilai ini.</p>
         </div>
-        <div>
+        <div class="md:col-span-2">
+          <label class="text-sm font-medium text-slate-600">Deskripsi</label>
+          <textarea v-model="form.description" rows="3" class="input mt-1"></textarea>
+        </div>
+        <div class="md:col-span-2">
           <label class="text-sm font-medium text-slate-600">Gambar Produk</label>
           <div class="mt-1 flex flex-col gap-3 md:flex-row md:items-center">
             <div class="flex h-20 w-20 items-center justify-center overflow-hidden rounded-lg bg-slate-100">
               <img v-if="productImagePreview" :src="productImagePreview" alt="Preview produk" class="h-full w-full object-cover" />
               <PhotoIcon v-else class="h-8 w-8 text-slate-400" />
             </div>
-            <div class="flex flex-col gap-2">
+            <div class="flex flex-col gap-3">
               <input type="file" accept="image/*" class="input" @change="handleProductImageChange" />
               <button v-if="form.imageData || form.imageUrl" type="button" class="text-xs font-medium text-red-500" @click="clearProductImage">
                 Hapus gambar
               </button>
             </div>
           </div>
-        </div>
-        <div class="md:col-span-2">
-          <label class="text-sm font-medium text-slate-600">Deskripsi</label>
-          <textarea v-model="form.description" rows="3" class="input mt-1"></textarea>
         </div>
         <div class="md:col-span-2 flex items-center gap-2">
           <button type="submit" class="btn-primary">
@@ -129,9 +128,10 @@
           </button>
         </div>
       </form>
-    </div>
-
-    <div class="card overflow-hidden">
+        </div>
+      </aside>
+      <div class="space-y-6 xl:col-span-3 xl:order-2">
+        <div class="card overflow-hidden">
       <div v-if="productsLoading" class="space-y-4 p-6">
         <div class="space-y-3">
           <div
@@ -162,6 +162,11 @@
         </button>
       </div>
       <template v-else>
+        <div v-if="products.length" class="flex items-center justify-end border-b border-slate-100 px-4 py-3">
+          <button type="button" class="btn-ghost text-xs" @click="productModalOpen = true">
+            Lihat Semua
+          </button>
+        </div>
         <div class="overflow-x-auto">
           <table class="min-w-full text-sm">
             <thead class="text-left text-slate-500 uppercase tracking-wider">
@@ -264,6 +269,8 @@
           </div>
         </footer>
       </template>
+        </div>
+      </div>
     </div>
 
     <BaseModal v-model="productModalOpen" title="Daftar Produk">
