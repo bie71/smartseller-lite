@@ -12,29 +12,29 @@ import (
 )
 
 type CustomerService struct {
-    repo *repo.CustomerRepository
+	repo *repo.CustomerRepository
 }
 
 type CustomerListOptions struct {
-    Query    string `json:"query"`
-    Page     int    `json:"page"`
-    PageSize int    `json:"pageSize"`
+	Query    string `json:"query"`
+	Page     int    `json:"page"`
+	PageSize int    `json:"pageSize"`
 }
 
 type CustomerListResult struct {
-    Items    []domain.Customer `json:"items"`
-    Total    int               `json:"total"`
-    Page     int               `json:"page"`
-    PageSize int               `json:"pageSize"`
-    Counts   struct {
-        Customer int `json:"customer"`
-        Marketer int `json:"marketer"`
-        Reseller int `json:"reseller"`
-    } `json:"counts"`
+	Items    []domain.Customer `json:"items"`
+	Total    int               `json:"total"`
+	Page     int               `json:"page"`
+	PageSize int               `json:"pageSize"`
+	Counts   struct {
+		Customer int `json:"customer"`
+		Marketer int `json:"marketer"`
+		Reseller int `json:"reseller"`
+	} `json:"counts"`
 }
 
 func NewCustomerService(repo *repo.CustomerRepository) *CustomerService {
-    return &CustomerService{repo: repo}
+	return &CustomerService{repo: repo}
 }
 
 func (s *CustomerService) Warm(ctx context.Context) {
@@ -92,41 +92,48 @@ func (s *CustomerService) Update(ctx context.Context, c domain.Customer) (*domai
 }
 
 func (s *CustomerService) List(ctx context.Context) ([]domain.Customer, error) {
-    result, err := s.ListPaged(ctx, CustomerListOptions{Page: 1, PageSize: 0})
-    if err != nil {
-        return nil, err
-    }
-    return result.Items, nil
+	result, err := s.ListPaged(ctx, CustomerListOptions{Page: 1, PageSize: 0})
+	if err != nil {
+		return nil, err
+	}
+	return result.Items, nil
 }
 
 func (s *CustomerService) Get(ctx context.Context, id string) (*domain.Customer, error) {
-    if id == "" {
-        return nil, errors.New("customer id required")
+	if id == "" {
+		return nil, errors.New("customer id required")
 	}
 	return s.repo.Get(ctx, id)
 }
 
+func (s *CustomerService) Delete(ctx context.Context, id string) error {
+	if strings.TrimSpace(id) == "" {
+		return errors.New("customer id required")
+	}
+	return s.repo.Delete(ctx, id)
+}
+
 func (s *CustomerService) ReplaceAll(ctx context.Context, items []domain.Customer) error {
-    return s.repo.ReplaceAll(ctx, items)
+	return s.repo.ReplaceAll(ctx, items)
 }
 
 func (s *CustomerService) ListPaged(ctx context.Context, opts CustomerListOptions) (CustomerListResult, error) {
-    repoResult, err := s.repo.ListPaged(ctx, repo.CustomerListOptions{
-        Query:    opts.Query,
-        Page:     opts.Page,
-        PageSize: opts.PageSize,
-    })
-    if err != nil {
-        return CustomerListResult{}, err
-    }
-    result := CustomerListResult{
-        Items:    repoResult.Items,
-        Total:    repoResult.Total,
-        Page:     repoResult.Page,
-        PageSize: repoResult.PageSize,
-        Counts:   repoResult.Counts,
-    }
-    return result, nil
+	repoResult, err := s.repo.ListPaged(ctx, repo.CustomerListOptions{
+		Query:    opts.Query,
+		Page:     opts.Page,
+		PageSize: opts.PageSize,
+	})
+	if err != nil {
+		return CustomerListResult{}, err
+	}
+	result := CustomerListResult{
+		Items:    repoResult.Items,
+		Total:    repoResult.Total,
+		Page:     repoResult.Page,
+		PageSize: repoResult.PageSize,
+		Counts:   repoResult.Counts,
+	}
+	return result, nil
 }
 
 func validateCustomer(c domain.Customer) error {

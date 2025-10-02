@@ -1,4 +1,4 @@
-import { getJson, postJson, putJson } from './http';
+import { deleteJson, getJson, postJson, putJson } from './http';
 
 export interface Product {
   id?: string;
@@ -137,4 +137,8 @@ export async function adjustStock(productID: string, delta: number, reason: stri
 
 export async function archiveProduct(productID: string): Promise<void> {
   await postJson(`/products/${productID}/archive`);
+}
+
+export async function deleteProduct(productID: string): Promise<void> {
+  await deleteJson(`/products/${productID}`);
 }

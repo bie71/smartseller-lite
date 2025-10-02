@@ -246,6 +246,13 @@
                     <ArchiveBoxXMarkIcon class="h-4 w-4" />
                     Arsipkan
                   </button>
+                  <button
+                    class="inline-flex items-center gap-1 rounded-lg border border-red-300 px-3 py-1 text-xs font-semibold text-red-600 transition hover:bg-red-50"
+                    @click="deleteProductAction(product)"
+                  >
+                    <TrashIcon class="h-4 w-4" />
+                    Hapus
+                  </button>
                 </td>
               </tr>
             </tbody>
@@ -432,7 +439,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import BaseModal from '../components/BaseModal.vue';
 import type { Product } from '../../modules/product';
-import { archiveProduct as archiveProductApi, listProducts, saveProduct } from '../../modules/product';
+import { archiveProduct as archiveProductApi, deleteProduct as deleteProductApi, listProducts, saveProduct } from '../../modules/product';
 import { useToastStore } from '../stores/toast';
 import {
   ArrowsUpDownIcon,
@@ -445,6 +452,7 @@ import {
   MagnifyingGlassIcon,
   PencilSquareIcon,
   PhotoIcon,
+  TrashIcon,
   Squares2X2Icon,
   XMarkIcon
 } from '@heroicons/vue/24/outline';
@@ -958,6 +966,32 @@ async function archiveProductAction(product: Product) {
   } catch (error) {
     console.error(error);
     toast.push('Gagal mengarsipkan produk.', 'error');
+  }
+}
+
+async function deleteProductAction(product: Product) {
+  if (!product.id) return;
+  const confirmed = window.confirm(
+    `Hapus ${product.name}? Tindakan ini tidak dapat dibatalkan dan produk akan hilang dari daftar.`
+  );
+  if (!confirmed) {
+    return;
+  }
+  try {
+    await deleteProductApi(product.id);
+    if (form.id === product.id) {
+      resetForm();
+    }
+    if (productDetail.value?.id === product.id) {
+      productDetailOpen.value = false;
+      productDetail.value = null;
+    }
+    await loadProducts();
+    toast.push(`${product.name} dihapus.`, 'success');
+  } catch (error) {
+    console.error(error);
+    const message = error instanceof Error ? error.message : 'Gagal menghapus produk.';
+    toast.push(message, 'error');
   }
 }
 

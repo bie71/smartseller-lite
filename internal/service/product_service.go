@@ -12,28 +12,28 @@ import (
 
 // ProductService encapsulates business rules for products and stock.
 type ProductService struct {
-    repo  *repo.ProductRepository
-    media *media.Manager
+	repo  *repo.ProductRepository
+	media *media.Manager
 }
 
 type ProductListOptions struct {
-    Query    string `json:"query"`
-    Page     int    `json:"page"`
-    PageSize int    `json:"pageSize"`
+	Query    string `json:"query"`
+	Page     int    `json:"page"`
+	PageSize int    `json:"pageSize"`
 }
 
 type ProductListResult struct {
-    Items              []domain.Product `json:"items"`
-    Total              int              `json:"total"`
-    Page               int              `json:"page"`
-    PageSize           int              `json:"pageSize"`
-    OutOfStockCount    int              `json:"outOfStockCount"`
-    WarningStockCount  int              `json:"warningStockCount"`
-    LowStockHighlights []domain.Product `json:"lowStockHighlights"`
+	Items              []domain.Product `json:"items"`
+	Total              int              `json:"total"`
+	Page               int              `json:"page"`
+	PageSize           int              `json:"pageSize"`
+	OutOfStockCount    int              `json:"outOfStockCount"`
+	WarningStockCount  int              `json:"warningStockCount"`
+	LowStockHighlights []domain.Product `json:"lowStockHighlights"`
 }
 
 func NewProductService(repo *repo.ProductRepository, mediaManager *media.Manager) *ProductService {
-    return &ProductService{repo: repo, media: mediaManager}
+	return &ProductService{repo: repo, media: mediaManager}
 }
 
 func (s *ProductService) Warm(ctx context.Context) {
@@ -131,17 +131,17 @@ func (s *ProductService) AdjustStock(ctx context.Context, productID string, delt
 }
 
 func (s *ProductService) List(ctx context.Context) ([]domain.Product, error) {
-    result, err := s.ListPaged(ctx, ProductListOptions{Page: 1, PageSize: 0})
-    if err != nil {
-        return nil, err
-    }
-    return result.Items, nil
+	result, err := s.ListPaged(ctx, ProductListOptions{Page: 1, PageSize: 0})
+	if err != nil {
+		return nil, err
+	}
+	return result.Items, nil
 }
 
 func (s *ProductService) ListIncludingArchived(ctx context.Context) ([]domain.Product, error) {
-    items, err := s.repo.ListIncludingArchived(ctx)
-    if err != nil {
-        return nil, err
+	items, err := s.repo.ListIncludingArchived(ctx)
+	if err != nil {
+		return nil, err
 	}
 	for i := range items {
 		s.decorate(&items[i])
@@ -150,32 +150,32 @@ func (s *ProductService) ListIncludingArchived(ctx context.Context) ([]domain.Pr
 }
 
 func (s *ProductService) ListPaged(ctx context.Context, opts ProductListOptions) (ProductListResult, error) {
-    repoResult, err := s.repo.ListPaged(ctx, repo.ProductListOptions{
-        Query:           opts.Query,
-        Page:            opts.Page,
-        PageSize:        opts.PageSize,
-        IncludeArchived: false,
-    })
-    if err != nil {
-        return ProductListResult{}, err
-    }
+	repoResult, err := s.repo.ListPaged(ctx, repo.ProductListOptions{
+		Query:           opts.Query,
+		Page:            opts.Page,
+		PageSize:        opts.PageSize,
+		IncludeArchived: false,
+	})
+	if err != nil {
+		return ProductListResult{}, err
+	}
 
-    for i := range repoResult.Items {
-        s.decorate(&repoResult.Items[i])
-    }
-    for i := range repoResult.LowStockHighlights {
-        s.decorate(&repoResult.LowStockHighlights[i])
-    }
+	for i := range repoResult.Items {
+		s.decorate(&repoResult.Items[i])
+	}
+	for i := range repoResult.LowStockHighlights {
+		s.decorate(&repoResult.LowStockHighlights[i])
+	}
 
-    return ProductListResult{
-        Items:              repoResult.Items,
-        Total:              repoResult.Total,
-        Page:               repoResult.Page,
-        PageSize:           repoResult.PageSize,
-        OutOfStockCount:    repoResult.OutOfStockCount,
-        WarningStockCount:  repoResult.WarningStockCount,
-        LowStockHighlights: repoResult.LowStockHighlights,
-    }, nil
+	return ProductListResult{
+		Items:              repoResult.Items,
+		Total:              repoResult.Total,
+		Page:               repoResult.Page,
+		PageSize:           repoResult.PageSize,
+		OutOfStockCount:    repoResult.OutOfStockCount,
+		WarningStockCount:  repoResult.WarningStockCount,
+		LowStockHighlights: repoResult.LowStockHighlights,
+	}, nil
 }
 
 func (s *ProductService) Get(ctx context.Context, id string) (*domain.Product, error) {
@@ -195,6 +195,23 @@ func (s *ProductService) Archive(ctx context.Context, id string) error {
 		return errors.New("product id required")
 	}
 	return s.repo.Archive(ctx, id)
+}
+
+func (s *ProductService) Delete(ctx context.Context, id string) error {
+	if strings.TrimSpace(id) == "" {
+		return errors.New("product id required")
+	}
+	var existing *domain.Product
+	if s.repo != nil {
+		existing, _ = s.repo.Get(ctx, id)
+	}
+	if err := s.repo.Delete(ctx, id); err != nil {
+		return err
+	}
+	if existing != nil && s.media != nil {
+		_ = s.media.Remove(existing.ImagePath, existing.ThumbPath)
+	}
+	return nil
 }
 
 func (s *ProductService) ReplaceAll(ctx context.Context, items []domain.Product) error {

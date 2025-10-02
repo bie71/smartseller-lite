@@ -121,6 +121,14 @@
                   <PencilSquareIcon class="h-4 w-4" />
                   Edit
                 </button>
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 rounded-lg border border-red-300 px-3 py-1 text-xs font-semibold text-red-600 transition hover:bg-red-50"
+                  @click="deleteCustomerAction(customer)"
+                >
+                  <TrashIcon class="h-4 w-4" />
+                  Hapus
+                </button>
               </div>
             </header>
             <p v-if="customer.address" class="text-sm text-slate-600 flex items-start gap-2">
@@ -310,7 +318,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import BaseModal from '../components/BaseModal.vue';
 import type { Customer, CustomerType } from '../../modules/customer';
-import { listCustomers, saveCustomer } from '../../modules/customer';
+import { deleteCustomer as deleteCustomerApi, listCustomers, saveCustomer } from '../../modules/customer';
 import { useToastStore } from '../stores/toast';
 import {
   ChevronLeftIcon,
@@ -320,6 +328,7 @@ import {
   MapPinIcon,
   PencilSquareIcon,
   PhoneIcon,
+  TrashIcon,
   UserPlusIcon,
   UsersIcon,
   XMarkIcon
@@ -580,6 +589,34 @@ function editCustomer(customer: Customer) {
   customerDetailOpen.value = false;
   Object.assign(form, customer);
   editing.value = true;
+}
+
+async function deleteCustomerAction(customer: Customer) {
+  if (!customer.id) {
+    return;
+  }
+  const confirmed = window.confirm(
+    `Hapus ${customer.name}? Tindakan ini akan menghapus data kontak dan tidak dapat dibatalkan.`
+  );
+  if (!confirmed) {
+    return;
+  }
+  try {
+    await deleteCustomerApi(customer.id);
+    if (form.id === customer.id) {
+      resetForm();
+    }
+    if (activeCustomer.value?.id === customer.id) {
+      customerDetailOpen.value = false;
+      activeCustomer.value = null;
+    }
+    await loadCustomers();
+    toast.push(`${customer.name} dihapus.`, 'success');
+  } catch (error) {
+    console.error(error);
+    const message = error instanceof Error && error.message ? error.message : 'Gagal menghapus kontak.';
+    toast.push(message, 'error');
+  }
 }
 
 function openCustomerDetail(customer: Customer) {

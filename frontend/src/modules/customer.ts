@@ -1,4 +1,4 @@
-import { getJson, postJson, putJson } from './http';
+import { deleteJson, getJson, postJson, putJson } from './http';
 
 export type CustomerType = 'customer' | 'marketer' | 'reseller';
 
@@ -105,4 +105,8 @@ export async function saveCustomer(customer: Customer): Promise<Customer> {
   const id = String(payload.id);
   const updated = await putJson<ApiCustomer>(`/customers/${id}`, payload);
   return adaptCustomer(updated);
+}
+
+export async function deleteCustomer(customerID: string): Promise<void> {
+  await deleteJson(`/customers/${customerID}`);
 }

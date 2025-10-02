@@ -11,9 +11,9 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"runtime"
 	"strconv"
 	"strings"
@@ -26,12 +26,20 @@ import (
 	"smartseller-lite-starter/internal/app"
 	"smartseller-lite-starter/internal/db"
 	"smartseller-lite-starter/internal/domain"
+	"smartseller-lite-starter/internal/httpapi"
 	"smartseller-lite-starter/internal/media"
 	"smartseller-lite-starter/internal/service"
+	"smartseller-lite-starter/internal/util"
 )
 
 //go:embed frontend/dist/*
 var embeddedDist embed.FS
+
+const (
+	healthEndpoint      = "/api/health"
+	healthCheckAttempts = 20
+	healthCheckInterval = 200 * time.Millisecond
+)
 
 func main() {
 	_ = godotenv.Load()
@@ -51,6 +59,25 @@ func main() {
 	}
 	flag.StringVar(&dsn, "dsn", defaultDSN, "MySQL DSN (e.g. user:pass@tcp(127.0.0.1:3306)/smartseller)")
 	flag.Parse()
+
+	openURL := fmt.Sprintf("http://%s/", addr)
+	healthURL := fmt.Sprintf("http://%s%s", addr, healthEndpoint)
+
+	if !portAvailable(addr) {
+		if openBrowserFlag {
+			client := &http.Client{Timeout: time.Second}
+			if resp, err := client.Get(healthURL); err == nil {
+				resp.Body.Close()
+				if resp.StatusCode == http.StatusOK {
+					util.OpenBrowser(openURL)
+					return
+				}
+			}
+			util.OpenBrowser(openURL)
+		}
+		log.Printf("address %s already in use, exiting", addr)
+		return
+	}
 
 	store, err := db.NewStore(strings.TrimSpace(dsn))
 	if err != nil {
@@ -85,6 +112,7 @@ func main() {
 
 	api := app.NewAPI(core)
 	mountAPI(router, api)
+	router.Get(healthEndpoint, httpapi.HealthHandler(brandName, store))
 
 	router.Handle("/media/*", http.StripPrefix("/media/", http.FileServer(http.Dir(mediaManager.MediaDir()))))
 
@@ -105,13 +133,10 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	log.Printf("SmartSeller Lite listening on http://%s (db: %s, media: %s)\n", addr, store.RedactedDSN(), mediaManager.MediaDir())
+	log.Printf("SmartSeller Lite listening on %s (db: %s, media: %s)\n", openURL, store.RedactedDSN(), mediaManager.MediaDir())
 
 	if openBrowserFlag {
-		go func() {
-			time.Sleep(300 * time.Millisecond)
-			openDefaultBrowser(fmt.Sprintf("http://%s/", addr))
-		}()
+		go waitForHealthAndOpen(healthURL, openURL)
 	}
 
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -126,21 +151,6 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
-func openDefaultBrowser(url string) {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
-	case "darwin":
-		cmd = exec.Command("open", url)
-	default:
-		cmd = exec.Command("xdg-open", url)
-	}
-	if err := cmd.Start(); err != nil {
-		log.Printf("failed to open browser: %v", err)
-	}
-}
-
 func parsePositiveInt(raw string, fallback int) int {
 	if strings.TrimSpace(raw) == "" {
 		return fallback
@@ -152,6 +162,30 @@ func parsePositiveInt(raw string, fallback int) int {
 	return value
 }
 
+func waitForHealthAndOpen(healthURL, openURL string) {
+	client := &http.Client{Timeout: time.Second}
+	for attempt := 0; attempt < healthCheckAttempts; attempt++ {
+		resp, err := client.Get(healthURL)
+		if err == nil {
+			resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				util.OpenBrowser(openURL)
+				return
+			}
+		}
+		time.Sleep(healthCheckInterval)
+	}
+}
+
+func portAvailable(address string) bool {
+	ln, err := net.Listen("tcp", address)
+	if err != nil {
+		return false
+	}
+	_ = ln.Close()
+	return true
+}
+
 func mountAPI(r chi.Router, api *app.API) {
 	r.Route("/api", func(router chi.Router) {
 		router.Get("/products", handleListProducts(api))
@@ -159,10 +193,12 @@ func mountAPI(r chi.Router, api *app.API) {
 		router.Put("/products/{id}", handleUpdateProduct(api))
 		router.Post("/products/{id}/adjust-stock", handleAdjustStock(api))
 		router.Post("/products/{id}/archive", handleArchiveProduct(api))
+		router.Delete("/products/{id}", handleDeleteProduct(api))
 
 		router.Get("/customers", handleListCustomers(api))
 		router.Post("/customers", handleCreateCustomer(api))
 		router.Put("/customers/{id}", handleUpdateCustomer(api))
+		router.Delete("/customers/{id}", handleDeleteCustomer(api))
 
 		router.Get("/orders", handleListOrders(api))
 		router.Post("/orders", handleCreateOrder(api))
@@ -296,6 +332,17 @@ func handleArchiveProduct(api *app.API) http.HandlerFunc {
 	}
 }
 
+func handleDeleteProduct(api *app.API) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		if err := api.DeleteProduct(r.Context(), id); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		writeJSON(w, http.StatusNoContent, nil)
+	}
+}
+
 func handleListCustomers(api *app.API) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query()
@@ -351,6 +398,17 @@ func handleUpdateCustomer(api *app.API) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, updated)
+	}
+}
+
+func handleDeleteCustomer(api *app.API) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		if err := api.DeleteCustomer(r.Context(), id); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		writeJSON(w, http.StatusNoContent, nil)
 	}
 }
 

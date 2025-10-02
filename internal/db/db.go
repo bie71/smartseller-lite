@@ -56,20 +56,9 @@ func NewStore(dsn string) (*Store, error) {
 		cfg.Loc = time.UTC
 	}
 
-	conn, err := sql.Open("mysql", cfg.FormatDSN())
+	conn, err := openMySQLWithRetry(cfg.FormatDSN())
 	if err != nil {
 		return nil, fmt.Errorf("open mysql: %w", err)
-	}
-	conn.SetMaxIdleConns(5)
-	conn.SetMaxOpenConns(20)
-	conn.SetConnMaxIdleTime(15 * time.Minute)
-	conn.SetConnMaxLifetime(60 * time.Minute)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := conn.PingContext(ctx); err != nil {
-		_ = conn.Close()
-		return nil, fmt.Errorf("ping mysql: %w", err)
 	}
 
 	store := &Store{db: conn, cfg: cfg}
