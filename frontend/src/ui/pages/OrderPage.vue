@@ -146,7 +146,7 @@
                 <label class="text-xs uppercase text-slate-500">Alamat</label>
                 <textarea
                   v-model="recipientCustom.address"
-                  rows="3"
+                  rows="2"
                   class="input mt-1"
                   placeholder="Alamat lengkap untuk pengiriman"
                   required
