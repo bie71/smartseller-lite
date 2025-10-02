@@ -13,9 +13,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/chai2010/webp"
 	"github.com/jung-kurt/gofpdf"
 
+	_ "golang.org/x/image/webp"
 	_ "image/gif"
 	_ "image/jpeg"
 
@@ -71,12 +71,12 @@ type OrderListSummary struct {
 }
 
 type OrderListResult struct {
-	Items    []domain.Order  `json:"items"`
-	Total    int             `json:"total"`
-	Page     int             `json:"page"`
-	PageSize int             `json:"pageSize"`
+	Items    []domain.Order   `json:"items"`
+	Total    int              `json:"total"`
+	Page     int              `json:"page"`
+	PageSize int              `json:"pageSize"`
 	Summary  OrderListSummary `json:"summary"`
-	Couriers []string        `json:"couriers"`
+	Couriers []string         `json:"couriers"`
 }
 
 func NewOrderService(repo *repo.OrderRepository, products *ProductService, customers *CustomerService, settings *SettingsService) *OrderService {
@@ -438,24 +438,10 @@ func formatCustomerLocation(c *domain.Customer) string {
 	return strings.TrimSpace(location)
 }
 
-func normaliseLogoForPDF(data []byte, mime string) ([]byte, string, error) {
-	trimmedMime := strings.TrimSpace(strings.ToLower(mime))
-	var img image.Image
-	var err error
-	if trimmedMime == "image/webp" {
-		img, err = webp.Decode(bytes.NewReader(data))
-		if err != nil {
-			return nil, "", fmt.Errorf("decode webp logo: %w", err)
-		}
-	} else {
-		img, _, err = image.Decode(bytes.NewReader(data))
-		if err != nil {
-			if alt, altErr := webp.Decode(bytes.NewReader(data)); altErr == nil {
-				img = alt
-			} else {
-				return nil, "", fmt.Errorf("decode logo: %w", err)
-			}
-		}
+func normaliseLogoForPDF(data []byte, _ string) ([]byte, string, error) {
+	img, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, "", fmt.Errorf("decode logo: %w", err)
 	}
 
 	square := cropSquare(img)

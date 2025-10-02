@@ -56,7 +56,7 @@ func (s *SettingsService) Update(ctx context.Context, payload domain.AppSettings
 		payload.LogoWidth = asset.Width
 		payload.LogoHeight = asset.Height
 		payload.LogoSizeBytes = asset.SizeBytes
-		payload.LogoMime = "image/webp"
+		payload.LogoMime = media.PreferredImageMIME()
 	} else if current != nil {
 		if payload.LogoPath == "" && payload.LogoData == "" && current.LogoPath != "" {
 			if s.media != nil {
@@ -113,7 +113,7 @@ func (s *SettingsService) decorate(settings *domain.AppSettings) {
 		settings.LogoURL = s.media.PublicURL(settings.LogoPath)
 	}
 	if settings.LogoMime == "" && settings.LogoPath != "" {
-		settings.LogoMime = "image/webp"
+		settings.LogoMime = media.PreferredImageMIME()
 	}
 }
 

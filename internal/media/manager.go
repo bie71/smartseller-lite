@@ -17,7 +17,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chai2010/webp"
 	"github.com/disintegration/imaging"
 	"github.com/google/uuid"
 
@@ -250,11 +249,10 @@ func (m *Manager) saveImage(ctx context.Context, payload, bucket string, maxSize
 	}
 
 	master := imaging.Fit(img, maxSize, maxSize, imaging.Lanczos)
-	var masterBuf bytes.Buffer
-	if err := webp.Encode(&masterBuf, master, &webp.Options{Quality: 90}); err != nil {
-		return nil, fmt.Errorf("encode master webp: %w", err)
+	masterBytes, masterExt, err := encodeImageData(master, 90)
+	if err != nil {
+		return nil, fmt.Errorf("encode master image: %w", err)
 	}
-	masterBytes := masterBuf.Bytes()
 
 	asset := &Asset{
 		Width:     master.Bounds().Dx(),
@@ -272,7 +270,7 @@ func (m *Manager) saveImage(ctx context.Context, payload, bucket string, maxSize
 		return nil, fmt.Errorf("create media dir: %w", err)
 	}
 	id := uuid.New().String()
-	masterName := fmt.Sprintf("%s.webp", id)
+	masterName := fmt.Sprintf("%s%s", id, masterExt)
 	masterPath := filepath.Join(bucket, masterName)
 	if bucket != logosDirName {
 		masterPath = filepath.Join(bucket, fmt.Sprintf("%04d", now.Year()), fmt.Sprintf("%02d", int(now.Month())), masterName)
@@ -285,12 +283,11 @@ func (m *Manager) saveImage(ctx context.Context, payload, bucket string, maxSize
 
 	if includeThumb && thumbSize > 0 {
 		thumb := imaging.Fit(img, thumbSize, thumbSize, imaging.Lanczos)
-		var thumbBuf bytes.Buffer
-		if err := webp.Encode(&thumbBuf, thumb, &webp.Options{Quality: 85}); err != nil {
+		thumbBytes, thumbExt, err := encodeImageData(thumb, 85)
+		if err != nil {
 			return nil, fmt.Errorf("encode thumbnail: %w", err)
 		}
-		thumbBytes := thumbBuf.Bytes()
-		thumbName := fmt.Sprintf("%s.thumb.webp", id)
+		thumbName := fmt.Sprintf("%s.thumb%s", id, thumbExt)
 		thumbPath := filepath.Join(bucket, fmt.Sprintf("%04d", now.Year()), fmt.Sprintf("%02d", int(now.Month())), thumbName)
 		if err := os.WriteFile(filepath.Join(m.MediaDir(), thumbPath), thumbBytes, 0o644); err != nil {
 			return nil, fmt.Errorf("write thumbnail: %w", err)

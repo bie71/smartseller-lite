@@ -117,7 +117,7 @@ func (s *CourierService) Save(ctx context.Context, courier domain.Courier) (*dom
 		courier.LogoWidth = asset.Width
 		courier.LogoHeight = asset.Height
 		courier.LogoSizeBytes = asset.SizeBytes
-		courier.LogoMime = "image/webp"
+		courier.LogoMime = media.PreferredImageMIME()
 	} else if existing != nil {
 		if courier.LogoPath == "" && courier.LogoData == "" && existing.LogoPath != "" {
 			if s.media != nil {
@@ -192,6 +192,6 @@ func (s *CourierService) decorate(courier *domain.Courier) {
 		courier.LogoURL = s.media.PublicURL(courier.LogoPath)
 	}
 	if courier.LogoMime == "" && courier.LogoPath != "" {
-		courier.LogoMime = "image/webp"
+		courier.LogoMime = media.PreferredImageMIME()
 	}
 }
