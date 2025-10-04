@@ -492,31 +492,53 @@
             <p v-if="activeOrderRecipient?.address" class="text-xs text-slate-500">{{ activeOrderRecipient.address }}</p>
           </div>
         </div>
-        <div class="space-y-2">
-          <p class="text-xs font-semibold uppercase text-slate-400">Item</p>
-          <ul class="space-y-1">
-            <li
-              v-for="item in activeOrder.items"
-              :key="item.id"
-              class="flex flex-col border-b border-dotted border-slate-100 dark:border-slate-700 pb-1"
-            >
-              <!-- Baris 1: nama produk dan harga -->
-              <div class="flex justify-between text-sm">
-                <span>{{ productName(item.productId) }} × {{ item.quantity }}</span>
-                <span class="font-mono font-semibold">Rp {{ formatCurrency(item.unitPrice) }}</span>
-              </div>
 
-              <!-- Baris 2: diskon -->
-              <div
-                v-if="item.discountItem && item.discountItem > 0"
-                class="flex justify-between text-xs text-slate-500 mt-1"
-              >
-                <span>Diskon Item</span>
-                <span class="font-mono">- Rp {{ formatCurrency(item.discountItem) }}</span>
-              </div>
-            </li>
-          </ul>
+
+
+
+      <div class="space-y-3">
+  <p class="text-xs font-semibold uppercase text-blue-600">Item</p>
+  <ul class="space-y-2">
+    <li
+      v-for="item in activeOrder.items"
+      :key="item.id"
+      class="rounded-lg border border-blue-100 bg-blue-50/80 p-3 shadow-sm hover:shadow-md transition-all duration-200"
+    >
+      <!-- Baris 1: Nama Produk -->
+      <div class="flex justify-between text-sm font-medium text-slate-700 mb-2">
+        <span>{{ productName(item.productId) }} × {{ item.quantity }}</span>
+        <span class="text-xs text-slate-400">#{{ item.id }}</span>
+      </div>
+
+      <!-- Grid harga -->
+      <div class="grid grid-cols-3 gap-2 text-xs text-slate-700 border-t border-blue-100 pt-2">
+        <div class="flex flex-col">
+          <span class="text-[10px] uppercase text-blue-500">Harga Satuan</span>
+          <span class="font-mono">Rp {{ formatCurrency(item.unitPrice) }}</span>
         </div>
+
+        <div class="flex flex-col">
+          <span class="text-[10px] uppercase text-blue-500">Diskon</span>
+          <span v-if="item.discountItem && item.discountItem > 0" class="font-mono text-rose-500">
+            - Rp {{ formatCurrency(item.discountItem) }}
+          </span>
+          <span v-else class="font-mono text-slate-400 opacity-70">—</span>
+        </div>
+
+        <div class="flex flex-col text-right">
+          <span class="text-[10px] uppercase text-blue-500">Total</span>
+          <span class="font-mono font-semibold text-blue-700">
+            Rp {{ formatCurrency(item.unitPrice * item.quantity - (item.discountItem || 0)) }}
+          </span>
+        </div>
+      </div>
+    </li>
+  </ul>
+</div>
+
+
+
+
 
         <div class="grid gap-2 sm:grid-cols-2">
           <div>
