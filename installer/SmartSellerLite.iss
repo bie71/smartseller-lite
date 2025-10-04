@@ -1,6 +1,6 @@
 ﻿#define AppName "SmartSeller Lite"
 #define AppExe  "SmartSellerLite.exe"
-#define AppVer  "0.1.0"
+#define AppVer  "0.2.0"
 #define AppDir  "{commonpf}\SmartSeller Lite"
 #define IconFile AddBackslash(SourcePath) + "icon.ico"
 
