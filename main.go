@@ -1,4 +1,4 @@
-package main
+﻿package main
 
 import (
 	"bytes"
@@ -14,6 +14,8 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -21,6 +23,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	mysqlDriver "github.com/go-sql-driver/mysql"
 	"github.com/joho/godotenv"
 
 	"smartseller-lite-starter/internal/app"
@@ -41,8 +44,27 @@ const (
 	healthCheckInterval = 200 * time.Millisecond
 )
 
+func loadEnvFiles() {
+	envPaths := []string{".env"}
+
+	if runtime.GOOS == "windows" {
+		programData := strings.TrimSpace(os.Getenv("PROGRAMDATA"))
+		if programData != "" {
+			envPaths = append(envPaths, filepath.Join(programData, "SmartSellerLite", "config", ".env"))
+		}
+	}
+
+	for _, envPath := range envPaths {
+		if _, err := os.Stat(envPath); err == nil {
+			if err := godotenv.Overload(envPath); err != nil {
+				log.Printf("load env file %s: %v", envPath, err)
+			}
+		}
+	}
+}
+
 func main() {
-	_ = godotenv.Load()
+	loadEnvFiles()
 
 	var (
 		openBrowserFlag bool
@@ -55,7 +77,7 @@ func main() {
 	flag.StringVar(&addr, "addr", getEnv("APP_ADDR", "127.0.0.1:8787"), "HTTP bind address")
 	defaultDSN := strings.TrimSpace(getEnv("DATABASE_DSN", ""))
 	if defaultDSN == "" {
-		defaultDSN = "smartseller:smartseller@tcp(127.0.0.1:3306)/smartseller"
+		defaultDSN = "root:smartseller@tcp(127.0.0.1:3306)/smartseller"
 	}
 	flag.StringVar(&dsn, "dsn", defaultDSN, "MySQL DSN (e.g. user:pass@tcp(127.0.0.1:3306)/smartseller)")
 	flag.Parse()
@@ -79,11 +101,29 @@ func main() {
 		return
 	}
 
-	store, err := db.NewStore(strings.TrimSpace(dsn))
-	if err != nil {
-		log.Fatalf("init database: %v", err)
+	log.Printf("mariadb dsn: %v", dsn)
+	log.Printf("default dsn: %v", defaultDSN)
+
+	if err := ensureLocalMariaDB(dsn); err != nil {
+		log.Printf("mariadb bootstrap: %v", err)
+		util.ShowFatalError("SmartSeller Lite", fmt.Sprintf("Gagal menyiapkan layanan MariaDB lokal. Jalankan aplikasi sebagai Administrator atau instal ulang dengan opsi bundled DB.\n\nDetail error:\n%v", err))
 	}
 
+	store, err := db.NewStore(strings.TrimSpace(dsn))
+	if err != nil {
+		log.Printf("init database: %v", err)
+
+		var authErr *db.UnsupportedAuthPluginError
+		if errors.As(err, &authErr) {
+			message := buildAuthPluginErrorMessage(dsn, authErr.Plugin)
+			util.ShowFatalError("SmartSeller Lite", message)
+			return
+		}
+
+		errMessage := "SmartSeller Lite tidak bisa tersambung ke database. Pastikan layanan MariaDB berjalan atau periksa ulang credential yang disimpan saat proses instalasi."
+		util.ShowFatalError("SmartSeller Lite", fmt.Sprintf("%s\n\nDetail error:\n%v", errMessage, err))
+		return
+	}
 	brandName := getEnv("APP_BRAND_NAME", "SmartSeller Lite")
 
 	mediaBase, err := media.ResolveBaseDir()
@@ -176,7 +216,179 @@ func waitForHealthAndOpen(healthURL, openURL string) {
 		time.Sleep(healthCheckInterval)
 	}
 }
+func buildAuthPluginErrorMessage(rawDSN, plugin string) string {
+	pluginName := strings.TrimSpace(plugin)
+	if pluginName == "" {
+		pluginName = "non-standar"
+	}
 
+	cfg, err := mysqlDriver.ParseDSN(strings.TrimSpace(rawDSN))
+	user := "<user>"
+	host := "localhost"
+	if err == nil {
+		if u := strings.TrimSpace(cfg.User); u != "" {
+			user = u
+		}
+		if addr := strings.TrimSpace(cfg.Addr); addr != "" {
+			host = addr
+			if idx := strings.Index(host, ":"); idx >= 0 {
+				host = host[:idx]
+			}
+			host = strings.TrimSpace(host)
+			if host == "" {
+				host = "localhost"
+			}
+		}
+	}
+
+	var b strings.Builder
+	b.WriteString("SmartSeller Lite gagal login ke MariaDB karena server meminta plugin otentikasi \"")
+	b.WriteString(pluginName)
+	b.WriteString("\" yang belum didukung oleh driver MySQL bawaan aplikasi.\n\n")
+
+	b.WriteString("Langkah yang disarankan:\n")
+	b.WriteString("  1. Buka command prompt, masuk sebagai admin ke MariaDB (contoh: `mysql -u root -p`).\n")
+	b.WriteString("  2. Jalankan perintah berikut untuk akun yang dipakai aplikasi:\n\n")
+	b.WriteString("     ALTER USER '")
+	b.WriteString(user)
+	b.WriteString("'@'")
+	b.WriteString(host)
+	b.WriteString("' IDENTIFIED WITH mysql_native_password BY '<password-saat-ini>';\n\n")
+	b.WriteString("     Ganti <password-saat-ini> dengan kata sandi yang tersimpan di DSN aplikasi (file .env).\n")
+	b.WriteString("  3. Restart layanan MariaDB lalu buka kembali SmartSeller Lite.\n\n")
+	b.WriteString("Alternatif: set parameter `default_authentication_plugin=mysql_native_password` pada konfigurasi MariaDB agar akun baru otomatis memakai plugin tersebut.\n")
+
+	return b.String()
+}
+
+func ensureLocalMariaDB(dsn string) error {
+	if runtime.GOOS != "windows" {
+		return nil
+	}
+
+	if !shouldManageLocalMariaDB(dsn) {
+		return nil
+	}
+
+	exePath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("resolve executable path: %w", err)
+	}
+	exeDir := filepath.Dir(exePath)
+	mysqldPath := filepath.Join(exeDir, "mariadb", "bin", "mysqld.exe")
+	if !fileExists(mysqldPath) {
+		return nil
+	}
+
+	programData := strings.TrimSpace(os.Getenv("PROGRAMDATA"))
+	if programData == "" {
+		return errors.New("CSIDL_COMMON_APPDATA environment variable is not set")
+	}
+
+	mysqlDir := filepath.Join(programData, "SmartSellerLite", "mysql")
+	dataDir := filepath.Join(programData, "SmartSellerLite", "data")
+	if err := os.MkdirAll(mysqlDir, 0o755); err != nil {
+		return fmt.Errorf("create mysql config dir: %w", err)
+	}
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		return fmt.Errorf("create mysql data dir: %w", err)
+	}
+
+	defaultsFile := filepath.Join(mysqlDir, "my.ini")
+	if !fileExists(defaultsFile) {
+		return fmt.Errorf("file my.ini tidak ditemukan di %s", defaultsFile)
+	}
+
+	if err := ensureWindowsServiceRunning("SmartSellerDB", mysqldPath, defaultsFile); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func ensureWindowsServiceRunning(name, mysqldPath, defaultsFile string) error {
+	var buf bytes.Buffer
+
+	query := exec.Command("sc.exe", "query", name)
+	query.Stdout = &buf
+	query.Stderr = &buf
+	err := query.Run()
+	output := buf.String()
+	if err == nil {
+		if strings.Contains(strings.ToUpper(output), "RUNNING") {
+			return nil
+		}
+
+		buf.Reset()
+		start := exec.Command("sc.exe", "start", name)
+		start.Stdout = &buf
+		start.Stderr = &buf
+		if err := start.Run(); err != nil {
+			startOutput := buf.String()
+			if !strings.Contains(startOutput, "1056") {
+				return fmt.Errorf("start service %s: %s", name, strings.TrimSpace(startOutput))
+			}
+		}
+		return nil
+	}
+
+	if !strings.Contains(output, "1060") && !strings.Contains(err.Error(), "1060") {
+		return fmt.Errorf("query service %s: %s", name, strings.TrimSpace(output))
+	}
+
+	buf.Reset()
+	install := exec.Command(mysqldPath, "--install", name, "--defaults-file="+defaultsFile)
+	install.Stdout = &buf
+	install.Stderr = &buf
+	if err := install.Run(); err != nil {
+		return fmt.Errorf("install service %s: %s", name, strings.TrimSpace(buf.String()))
+	}
+
+	buf.Reset()
+	start := exec.Command("sc.exe", "start", name)
+	start.Stdout = &buf
+	start.Stderr = &buf
+	if err := start.Run(); err != nil {
+		startOutput := buf.String()
+		if !strings.Contains(startOutput, "1056") {
+			return fmt.Errorf("start service %s: %s", name, strings.TrimSpace(startOutput))
+		}
+	}
+
+	return nil
+}
+
+func shouldManageLocalMariaDB(dsn string) bool {
+	raw := strings.ToLower(strings.TrimSpace(dsn))
+	if raw == "" {
+		return true
+	}
+
+	idx := strings.Index(raw, "@tcp(")
+	if idx == -1 {
+		return false
+	}
+
+	hostPort := raw[idx+5:]
+	closing := strings.Index(hostPort, ")")
+	if closing == -1 {
+		return false
+	}
+
+	hostPort = hostPort[:closing]
+	host := hostPort
+	if colon := strings.Index(hostPort, ":"); colon >= 0 {
+		host = hostPort[:colon]
+	}
+	host = strings.TrimSpace(host)
+
+	return host == "" || host == "127.0.0.1" || host == "localhost"
+}
+
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
+}
 func portAvailable(address string) bool {
 	ln, err := net.Listen("tcp", address)
 	if err != nil {

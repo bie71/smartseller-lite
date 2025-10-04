@@ -41,6 +41,12 @@ func NewStore(dsn string) (*Store, error) {
 	if cfg.Params == nil {
 		cfg.Params = map[string]string{}
 	}
+	if !cfg.AllowNativePasswords {
+		cfg.AllowNativePasswords = true
+	}
+	if !cfg.AllowCleartextPasswords {
+		cfg.AllowCleartextPasswords = true
+	}
 	if cfg.Net == "" {
 		cfg.Net = "tcp"
 	}

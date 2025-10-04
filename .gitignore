@@ -43,4 +43,4 @@ tmp/
 *.db-wal
 *.wails
 
-*/*/mariadb
+*/*/mariadb*

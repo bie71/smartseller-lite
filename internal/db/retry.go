@@ -11,7 +11,7 @@ import (
 const (
 	defaultRetryAttempts = 10
 	defaultRetryDelay    = time.Second
-	pingTimeout          = 2 * time.Second
+	pingTimeout          = 5 * time.Second
 )
 
 // openMySQLWithRetry opens a MySQL connection with simple retry + ping logic.
@@ -25,7 +25,10 @@ func openMySQLWithRetry(dsn string) (*sql.DB, error) {
 	for attempt := 1; attempt <= defaultRetryAttempts; attempt++ {
 		conn, err := sql.Open("mysql", dsn)
 		if err != nil {
-			lastErr = err
+			lastErr = classifyAuthError(err)
+			if _, isUnsupported := lastErr.(*UnsupportedAuthPluginError); isUnsupported {
+				return nil, lastErr
+			}
 			time.Sleep(defaultRetryDelay)
 			continue
 		}
@@ -40,7 +43,10 @@ func openMySQLWithRetry(dsn string) (*sql.DB, error) {
 		}
 
 		_ = conn.Close()
-		lastErr = pingErr
+		lastErr = classifyAuthError(pingErr)
+		if _, isUnsupported := lastErr.(*UnsupportedAuthPluginError); isUnsupported {
+			return nil, lastErr
+		}
 		time.Sleep(defaultRetryDelay)
 	}
 
