@@ -226,32 +226,10 @@
                     {{ productStatus(product).label }}
                   </span>
                 </td>
-                <td class="py-3 flex flex-wrap gap-2">
-                  <button class="btn-secondary text-xs" @click="editProduct(product)">
-                    <PencilSquareIcon class="h-4 w-4" />
-                    Edit
-                  </button>
-                  <button class="btn-secondary text-xs" @click="openProductDetail(product)">
-                    <InformationCircleIcon class="h-4 w-4" />
-                    Detail
-                  </button>
-                  <button class="btn-secondary text-xs" @click="startOpnameWithProduct(product)">
-                    <ArrowsUpDownIcon class="h-4 w-4" />
-                    Stok
-                  </button>
-                  <button
-                    class="inline-flex items-center gap-1 rounded-lg border border-red-200 px-3 py-1 text-xs font-semibold text-red-600 transition hover:bg-red-50"
-                    @click="archiveProductAction(product)"
-                  >
-                    <ArchiveBoxXMarkIcon class="h-4 w-4" />
-                    Arsipkan
-                  </button>
-                  <button
-                    class="inline-flex items-center gap-1 rounded-lg border border-red-300 px-3 py-1 text-xs font-semibold text-red-600 transition hover:bg-red-50"
-                    @click="deleteProductAction(product)"
-                  >
-                    <TrashIcon class="h-4 w-4" />
-                    Hapus
+                <td class="py-3">
+                  <button v-if="product.id" class="btn-secondary text-xs" @click.stop="toggleActionMenu(product, $event)">
+                    Aksi
+                    <ChevronDownIcon class="h-4 w-4" />
                   </button>
                 </td>
               </tr>
@@ -432,6 +410,40 @@
         </button>
       </template>
     </BaseModal>
+
+    <!-- Teleported Action Menu -->
+    <Teleport to="body">
+      <div
+        v-if="activeActionMenu && activeProduct"
+        ref="actionMenuEl"
+        class="absolute z-50 mt-1 w-48 origin-top-right rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none"
+        :style="actionMenuPosition"
+      >
+        <div class="py-1" role="none">
+          <button class="action-menu-item" @click="editProduct(activeProduct)">
+            <PencilSquareIcon class="mr-3 h-5 w-5 text-gray-400" />
+            <span>Edit</span>
+          </button>
+          <button class="action-menu-item" @click="openProductDetail(activeProduct)">
+            <InformationCircleIcon class="mr-3 h-5 w-5 text-gray-400" />
+            <span>Detail</span>
+          </button>
+          <button class="action-menu-item" @click="startOpnameWithProduct(activeProduct)">
+            <ArrowsUpDownIcon class="mr-3 h-5 w-5 text-gray-400" />
+            <span>Stok</span>
+          </button>
+          <div class="border-t border-gray-100"></div>
+          <button class="action-menu-item text-red-700" @click="archiveProductAction(activeProduct)">
+            <ArchiveBoxXMarkIcon class="mr-3 h-5 w-5" />
+            <span>Arsipkan</span>
+          </button>
+          <button class="action-menu-item text-red-700" @click="deleteProductAction(activeProduct)">
+            <TrashIcon class="mr-3 h-5 w-5" />
+            <span>Hapus</span>
+          </button>
+        </div>
+      </div>
+    </Teleport>
   </section>
 </template>
 
@@ -441,6 +453,7 @@ import BaseModal from '../components/BaseModal.vue';
 import type { Product } from '../../modules/product';
 import { archiveProduct as archiveProductApi, deleteProduct as deleteProductApi, listProducts, saveProduct } from '../../modules/product';
 import { useToastStore } from '../stores/toast';
+import { nextTick } from 'vue';
 import {
   ArrowsUpDownIcon,
   ArchiveBoxXMarkIcon,
@@ -448,13 +461,13 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   ExclamationTriangleIcon,
-  InformationCircleIcon,
+  InformationCircleIcon, ChevronDownIcon,
   MagnifyingGlassIcon,
   PencilSquareIcon,
   PhotoIcon,
   TrashIcon,
   Squares2X2Icon,
-  XMarkIcon
+  XMarkIcon,
 } from '@heroicons/vue/24/outline';
 
 type ProductForm = {
@@ -508,10 +521,13 @@ const productModalError = ref('');
 const productDetailOpen = ref(false);
 const productDetail = ref<Product | null>(null);
 
-const toast = useToastStore();
 const outOfStockStat = ref(0);
 const warningStockStat = ref(0);
 const lowStockHighlights = ref<Product[]>([]);
+const activeActionMenu = ref<string | null>(null);
+const activeProduct = ref<Product | null>(null);
+const actionMenuEl = ref<HTMLElement | null>(null);
+const actionMenuPosition = ref({ top: '0px', left: '0px' });
 
 let productFetchId = 0;
 let productFetchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -751,6 +767,38 @@ watch(productModalPage, (value, oldValue) => {
     void loadProductModal();
   }
 });
+
+function closeActionMenu() {
+  activeActionMenu.value = null;
+}
+
+function toggleActionMenu(product: Product, event: MouseEvent) {
+  if (activeActionMenu.value === product.id) {
+    closeActionMenu();
+  } else {
+    const button = event.currentTarget as HTMLElement;
+    const rect = button.getBoundingClientRect();
+    activeActionMenu.value = product.id!;
+    activeProduct.value = product;
+
+    nextTick(() => {
+      if (actionMenuEl.value) {
+        const menuHeight = actionMenuEl.value.offsetHeight;
+        const menuWidth = actionMenuEl.value.offsetWidth;
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const spaceRight = window.innerWidth - rect.left;
+
+        const top = spaceBelow < menuHeight ? rect.top - menuHeight : rect.bottom;
+        const left = spaceRight < menuWidth ? rect.right - menuWidth : rect.left;
+
+        actionMenuPosition.value = { top: `${top}px`, left: `${left}px` };
+      }
+    });
+  }
+}
+
+const toast = useToastStore();
+
 
 async function loadProducts() {
   const requestId = ++productFetchId;
@@ -1138,5 +1186,17 @@ function syncSalePriceDisplay() {
 
 onMounted(async () => {
   await loadProducts();
+  const clickListener = (event: MouseEvent) => {
+    const target = event.target as HTMLElement | null;
+    if (activeActionMenu.value && !target?.closest('.action-menu-item') && !target?.closest('.btn-secondary')) {
+      closeActionMenu();
+    }
+  };
+  document.addEventListener('click', clickListener);
 });
 </script>
+<style scoped>
+.action-menu-item {
+  @apply flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900;
+}
+</style>
