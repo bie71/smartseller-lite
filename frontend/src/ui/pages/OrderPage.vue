@@ -495,12 +495,29 @@
         <div class="space-y-2">
           <p class="text-xs font-semibold uppercase text-slate-400">Item</p>
           <ul class="space-y-1">
-            <li v-for="item in activeOrder.items" :key="item.id" class="flex justify-between gap-2">
-              <span>{{ productName(item.productId) }} × {{ item.quantity }}</span>
-              <span class="font-mono text-left">Rp {{ formatCurrency(Math.max(item.unitPrice - item.discount, 0)) }}</span>
+            <li
+              v-for="item in activeOrder.items"
+              :key="item.id"
+              class="flex flex-col border-b border-dotted border-slate-100 dark:border-slate-700 pb-1"
+            >
+              <!-- Baris 1: nama produk dan harga -->
+              <div class="flex justify-between text-sm">
+                <span>{{ productName(item.productId) }} × {{ item.quantity }}</span>
+                <span class="font-mono font-semibold">Rp {{ formatCurrency(item.unitPrice) }}</span>
+              </div>
+
+              <!-- Baris 2: diskon -->
+              <div
+                v-if="item.discountItem && item.discountItem > 0"
+                class="flex justify-between text-xs text-slate-500 mt-1"
+              >
+                <span>Diskon Item</span>
+                <span class="font-mono">- Rp {{ formatCurrency(item.discountItem) }}</span>
+              </div>
             </li>
           </ul>
         </div>
+
         <div class="grid gap-2 sm:grid-cols-2">
           <div>
             <p class="text-xs font-semibold uppercase text-slate-400">Ekspedisi</p>
@@ -514,10 +531,31 @@
           </div>
           <div>
             <p class="text-xs font-semibold uppercase text-slate-400">Pembayaran</p>
-            <p>Subtotal Rp {{ formatCurrency(orderSubtotal(activeOrder)) }}</p>
-            <p>Diskon Rp {{ formatCurrency(activeOrder.discount) }}</p>
-            <p>Ongkir Rp {{ formatCurrency(activeOrder.shipment.shippingCost) }}</p>
-            <p class="font-semibold text-slate-800">Total Rp {{ formatCurrency(activeOrder.total) }}</p>
+              <p class="mt-1">Subtotal Rp {{ formatCurrency(orderSubtotal(activeOrder)) }}</p>
+
+              <p v-if="activeOrder && activeOrder.discountOrder > 0"
+                class="text-xs font-semibold text-emerald-600 mt-1">
+                Diskon Order - Rp {{ formatCurrency(activeOrder.discountOrder) }}
+              </p>
+
+              <!-- Jika ongkir ditanggung pembeli: tampilkan diskon ongkir -->
+              <template v-if="activeOrder && activeOrder.shipment.shippingByBuyer">
+                <p class="text-xs line-through text-slate-400 mt-1">
+                  Ongkir Rp {{ formatCurrency(activeOrder.shipment.shippingCost) }}
+                </p>
+                <p class="text-xs font-semibold text-emerald-600 mt-1">
+                  Ongkir dibayar pembeli - Rp {{ formatCurrency(activeOrder.shipment.shippingCost) }}
+                </p>
+              </template>
+              <!-- Jika tidak, tampilkan ongkir biasa -->
+              <p v-else class="mt-1">
+                Ongkir Rp {{ formatCurrency(activeOrder?.shipment.shippingCost || 0) }}
+              </p>
+
+              <p class="font-semibold text-slate-800 mt-1">
+                Total Rp {{ formatCurrency(activeOrder?.total || 0) }}
+              </p>
+
           </div>
         </div>
         <div v-if="activeOrder.notes" class="rounded-lg bg-slate-50 p-3 text-xs text-slate-500">
@@ -666,7 +704,8 @@ const form = reactive({
   serviceLevel: '',
   trackingCode: '',
   shippingCost: 0,
-  discount: 0,
+  shippingByBuyer: false,
+  discountOrder: 0,
   notes: '',
   items: [] as OrderFormItem[]
 });
@@ -724,7 +763,7 @@ watch(
 );
 
 watch(
-  () => form.discount,
+  () => form.discountOrder,
   (value) => {
     const formatted = normalisePrice(value).display;
     if (orderDiscountDisplay.value !== formatted) {
@@ -771,7 +810,7 @@ function upsertCustomer(record: Customer) {
 
 const subtotal = computed(() =>
   form.items.reduce((total, item) => {
-    const revenue = item.unitPrice * item.quantity - item.discount;
+    const revenue = item.unitPrice * item.quantity - item.discountItem;
     return total + Math.max(revenue, 0);
   }, 0)
 );
@@ -783,11 +822,11 @@ const totalCost = computed(() =>
   }, 0)
 );
 
-const orderPaymentTotal = computed(() => subtotal.value - form.discount + form.shippingCost);
+const orderPaymentTotal = computed(() => subtotal.value - form.discountOrder + form.shippingCost);
 
 const estimatedProfit = computed(() => {
   const shippingCostToSubtract = isBuyerPayingShipping.value ? 0 : form.shippingCost;
-  const value = subtotal.value - form.discount - totalCost.value - shippingCostToSubtract;
+  const value = subtotal.value - form.discountOrder - totalCost.value - shippingCostToSubtract;
   return value < 0 ? 0 : value;
 });
 
@@ -924,7 +963,7 @@ function addItem() {
     productId: '',
     quantity: 1,
     unitPrice: 0,
-    discount: 0,
+    discountItem: 0,
     unitPriceDisplay: '',
     discountDisplay: ''
   });
@@ -942,7 +981,7 @@ function applyUnitPrice(item: OrderFormItem, value: number) {
 
 function applyDiscount(item: OrderFormItem, value: number) {
   const normalised = normalisePrice(value);
-  item.discount = normalised.value;
+  item.discountItem = normalised.value;
   item.discountDisplay = normalised.display;
 }
 
@@ -951,7 +990,7 @@ function bindProduct(item: OrderFormItem) {
   if (product) {
     item.product = product;
     applyUnitPrice(item, product.salePrice);
-    applyDiscount(item, item.discount);
+    applyDiscount(item, item.discountItem);
   }
 }
 
@@ -972,15 +1011,15 @@ function syncUnitPriceDisplay(item: OrderFormItem) {
 function onDiscountInput(item: OrderFormItem, event: Event) {
   const target = event.target as HTMLInputElement;
   const { value, display } = parsePriceInputValue(target.value);
-  if (item.discount !== value) {
-    item.discount = value;
+  if (item.discountItem !== value) {
+    item.discountItem = value;
   }
   item.discountDisplay = display;
 }
 
 function syncDiscountDisplay(item: OrderFormItem) {
   const { value, display } = parsePriceInputValue(item.discountDisplay);
-  item.discount = value;
+  item.discountItem = value;
   item.discountDisplay = display;
 }
 
@@ -1002,20 +1041,20 @@ function syncShippingCostDisplay() {
 function onOrderDiscountInput(event: Event) {
   const target = event.target as HTMLInputElement;
   const { value, display } = parsePriceInputValue(target.value);
-  if (form.discount !== value) {
-    form.discount = value;
+  if (form.discountOrder !== value) {
+    form.discountOrder = value;
   }
   orderDiscountDisplay.value = display;
 }
 
 function syncOrderDiscountDisplay() {
   const { value, display } = parsePriceInputValue(orderDiscountDisplay.value);
-  form.discount = value;
+  form.discountOrder = value;
   orderDiscountDisplay.value = display;
 }
 
 function lineRevenue(item: OrderFormItem) {
-  return Math.max(item.unitPrice * item.quantity - item.discount, 0);
+  return Math.max(item.unitPrice * item.quantity - item.discountItem, 0);
 }
 
 function lineCost(item: OrderFormItem) {
@@ -1032,7 +1071,7 @@ function orderSubtotal(order: Order | null | undefined) {
   if (!order) {
     return 0;
   }
-  return order.items.reduce((sum, item) => sum + Math.max(item.unitPrice * item.quantity - item.discount, 0), 0);
+  return order.items.reduce((sum, item) => sum + Math.max(item.unitPrice * item.quantity - item.discountItem, 0), 0);
 }
 
 function formatCurrency(value: number) {
@@ -1270,7 +1309,7 @@ function resetForm() {
   form.serviceLevel = '';
   form.trackingCode = '';
   form.shippingCost = 0;
-  form.discount = 0;
+  form.discountOrder = 0;
   form.notes = '';
   form.items = [] as OrderFormItem[];
   addItem();
@@ -1308,13 +1347,14 @@ async function submitOrder() {
       serviceLevel: form.serviceLevel,
       trackingCode: form.trackingCode,
       shippingCost: form.shippingCost,
-      discount: form.discount,
+      isBuyerPayingShipping: isBuyerPayingShipping.value,
+      discountOrder: form.discountOrder,
       notes: form.notes,
       items: form.items.map((item) => ({
         productId: item.productId,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
-        discount: item.discount
+        discountItem: item.discountItem
       }))
     };
     createdOrder = await createOrder(payload);
@@ -1322,7 +1362,8 @@ async function submitOrder() {
     resetForm();
   } catch (error) {
     console.error(error);
-    toast.push('Gagal menyimpan order. Mohon periksa data yang diisi.', 'error', { timeout: 5000 });
+    const message = error instanceof Error ? error.message : 'Gagal menyimpan order.';
+    toast.push(message, 'error', { timeout: 5000 });
   } finally {
     savingOrder.value = false;
   }
@@ -1356,6 +1397,12 @@ async function submitOrder() {
         trackingCode: createdOrder.shipment.trackingCode,
         orderCode: createdOrder.code,
         notes: createdOrder.notes,
+        items: createdOrder.items.map(item => ({
+          productName: productName(item.productId),
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          discountItem: item.discountItem
+        }))
       };
 
       const blob = await generateSingleLabelPdf(labelData, appSettings);
@@ -1401,7 +1448,8 @@ async function deleteOrderAction(order: Order) {
         toast.push(`Order ${order.code} telah dihapus.`, 'success');
     } catch (error) {
         console.error(error);
-        toast.push('Gagal menghapus order.', 'error');
+        const message = error instanceof Error ? error.message : 'Gagal menghapus order.';
+        toast.push(message, 'error');
     }
 }
 
@@ -1428,6 +1476,12 @@ async function downloadActiveLabel() {
       trackingCode: activeLabelOrder.value.shipment.trackingCode,
       orderCode: activeLabelOrder.value.code,
       notes: activeLabelOrder.value.notes,
+      items: activeLabelOrder.value.items.map(item => ({
+        productName: productName(item.productId),
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        discountItem: item.discountItem
+      }))
     };
     const blob = await generateSingleLabelPdf(labelData, appSettings);
     const url = URL.createObjectURL(blob);
@@ -1479,6 +1533,12 @@ async function handleDownloadLabel(orderId: string) {
       trackingCode: order.shipment.trackingCode,
       orderCode: order.code,
       notes: order.notes,
+      items: order.items.map(item => ({
+        productName: productName(item.productId),
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        discountItem: item.discountItem
+      }))
     };
     const blob = await generateSingleLabelPdf(labelData, appSettings);
     const url = URL.createObjectURL(blob);
@@ -1505,16 +1565,16 @@ function loadOrderIntoForm(order: Order) {
   form.serviceLevel = order.shipment.serviceLevel || '';
   form.trackingCode = '';
   form.shippingCost = order.shipment.shippingCost;
-  form.discount = order.discount;
+  form.discountOrder = order.discountOrder;
   form.notes = order.notes;
   form.items = order.items.map((item) => {
     const normalised = normalisePrice(item.unitPrice);
-    const normalisedDiscount = normalisePrice(item.discount);
+    const normalisedDiscount = normalisePrice(item.discountItem);
     return {
       productId: item.productId,
       quantity: item.quantity,
       unitPrice: normalised.value,
-      discount: normalisedDiscount.value,
+      discountItem: normalisedDiscount.value,
       product: productMap.value.get(item.productId),
       unitPriceDisplay: normalised.display,
       discountDisplay: normalisedDiscount.display
@@ -1527,7 +1587,7 @@ function loadOrderIntoForm(order: Order) {
   recipientMode.value = 'existing';
   resetManualContact(buyerCustom);
   resetManualContact(recipientCustom);
-  isBuyerPayingShipping.value = false;
+  isBuyerPayingShipping.value = order.shipment.shippingByBuyer ;
   toast.push(`Form diisi ulang dari order ${order.code}. Periksa sebelum menyimpan.`, 'info', { timeout: 6000 });
 }
 
@@ -1630,6 +1690,8 @@ const showLabelPanel = ref(false);
 function buildAutoLabelData(order?: Order | null) {
   const buyer = customers.value.find(c => c.id === (order?.buyerId || form?.buyerId));
   const recipient = customers.value.find(c => c.id === (order?.recipientId || form?.recipientId));
+  const items = order ? order.items : form.items;
+
   return {
     orderId: order?.id || '',
     senderName: buyer?.name || '',
@@ -1642,7 +1704,13 @@ function buildAutoLabelData(order?: Order | null) {
     service: order?.shipment?.serviceLevel || form.serviceLevel || '',
     trackingCode: order?.shipment?.trackingCode || form.trackingCode || '',
     orderCode: order?.code || '',
-    notes: order?.notes || form.notes || ''
+    notes: order?.notes || form.notes || '',
+    items: items.map(item => ({
+      productName: productName(item.productId),
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      discountItem: item.discountItem
+    }))
   };
 }
 

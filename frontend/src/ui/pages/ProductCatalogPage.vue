@@ -54,7 +54,7 @@
         </div>
         <div>
           <label class="text-sm font-medium text-slate-600">SKU</label>
-          <input v-model="form.sku" type="text" class="input mt-1" required />
+          <input v-model="form.sku" type="text" class="input mt-1" />
         </div>
         <div>
           <label class="text-sm font-medium text-slate-600">Harga Modal</label>
@@ -452,6 +452,8 @@ import { computed, onMounted, reactive, ref, watch } from 'vue';
 import BaseModal from '../components/BaseModal.vue';
 import type { Product } from '../../modules/product';
 import { archiveProduct as archiveProductApi, deleteProduct as deleteProductApi, listProducts, saveProduct } from '../../modules/product';
+import { storeToRefs } from 'pinia';
+import { useProductFormStore } from '../stores/product-form';
 import { useToastStore } from '../stores/toast';
 import { nextTick } from 'vue';
 import {
@@ -503,7 +505,9 @@ const productsTotal = ref(0);
 const productsLoading = ref(true);
 const loadError = ref('');
 const productSearch = ref('');
-const editing = ref(false);
+const productFormStore = useProductFormStore(); // Assuming storeToRefs is imported from 'vue' or a similar library
+const { form, editing } = storeToRefs(productFormStore);
+const { resetForm } = productFormStore;
 const page = ref(1);
 const pageSize = 6;
 const paginationButtonClasses =
@@ -532,31 +536,6 @@ const actionMenuPosition = ref({ top: '0px', left: '0px' });
 let productFetchId = 0;
 let productFetchTimer: ReturnType<typeof setTimeout> | null = null;
 
-const form = reactive<ProductForm>({
-  id: undefined,
-  name: '',
-  sku: '',
-  costPrice: 0,
-  salePrice: 0,
-  stock: 0,
-  category: '',
-  lowStockThreshold: 5,
-  description: '',
-  imageData: '',
-  imageMime: '',
-  imageUrl: '',
-  thumbUrl: '',
-  imagePath: '',
-  thumbPath: '',
-  imageHash: '',
-  imageWidth: 0,
-  imageHeight: 0,
-  imageSizeBytes: 0,
-  thumbWidth: 0,
-  thumbHeight: 0,
-  thumbSizeBytes: 0
-});
-
 const costPriceDisplay = ref('');
 const salePriceDisplay = ref('');
 
@@ -579,21 +558,21 @@ function resolveMediaPath(path?: string | null): string {
 }
 
 const productImagePreview = computed(() => {
-  const dataUri = makeImageSrc(form.imageData, form.imageMime);
+  const dataUri = makeImageSrc(form.value.imageData, form.value.imageMime);
   if (dataUri) {
     return dataUri;
   }
-  if (form.thumbUrl) {
-    return form.thumbUrl;
+  if (form.value.thumbUrl) {
+    return form.value.thumbUrl;
   }
-  if (form.imageUrl) {
-    return form.imageUrl;
+  if (form.value.imageUrl) {
+    return form.value.imageUrl;
   }
-  const fromThumbPath = resolveMediaPath(form.thumbPath);
+  const fromThumbPath = resolveMediaPath(form.value.thumbPath);
   if (fromThumbPath) {
     return fromThumbPath;
   }
-  const fromImagePath = resolveMediaPath(form.imagePath);
+  const fromImagePath = resolveMediaPath(form.value.imagePath);
   if (fromImagePath) {
     return fromImagePath;
   }
@@ -624,8 +603,8 @@ const productDetailImage = computed(() => {
 
 const productDetailSubtitle = computed(() => (productDetail.value ? `SKU ${productDetail.value.sku}` : ''));
 watch(
-  () => form.costPrice,
-  (value) => {
+  () => form.value.costPrice,
+  (value: number) => {
     const formatted = formatPriceInput(value);
     if (costPriceDisplay.value !== formatted) {
       costPriceDisplay.value = formatted;
@@ -635,8 +614,8 @@ watch(
 );
 
 watch(
-  () => form.salePrice,
-  (value) => {
+  () => form.value.salePrice,
+  (value: number) => {
     const formatted = formatPriceInput(value);
     if (salePriceDisplay.value !== formatted) {
       salePriceDisplay.value = formatted;
@@ -707,10 +686,10 @@ watch(products, () => {
 });
 
 watch(
-  () => form.lowStockThreshold,
-  (value) => {
+  () => form.value.lowStockThreshold,
+  (value: number) => {
     if (!Number.isFinite(value) || value <= 0) {
-      form.lowStockThreshold = 1;
+      form.value.lowStockThreshold = 1;
     }
   }
 );
@@ -900,45 +879,17 @@ function retryLoadProducts() {
   void loadProducts();
 }
 
-function resetForm() {
-  Object.assign(form, {
-    id: undefined,
-    name: '',
-    sku: '',
-    costPrice: 0,
-    salePrice: 0,
-    stock: 0,
-    category: '',
-    lowStockThreshold: 5,
-    description: '',
-    imageData: '',
-    imageMime: '',
-    imageUrl: '',
-    thumbUrl: '',
-    imagePath: '',
-    thumbPath: '',
-    imageHash: '',
-    imageWidth: 0,
-    imageHeight: 0,
-    imageSizeBytes: 0,
-    thumbWidth: 0,
-    thumbHeight: 0,
-    thumbSizeBytes: 0
-  });
-  editing.value = false;
-  costPriceDisplay.value = '';
-  salePriceDisplay.value = '';
-}
+
 
 async function handleSubmit() {
   try {
     const payload = {
-      ...form,
-      category: form.category.trim(),
-      costPrice: Math.max(0, Number.isFinite(form.costPrice) ? Number(form.costPrice) : 0),
-      salePrice: Math.max(0, Number.isFinite(form.salePrice) ? Number(form.salePrice) : 0),
-      lowStockThreshold: Math.max(1, Number.isFinite(form.lowStockThreshold) ? Number(form.lowStockThreshold) : 5),
-      stock: Math.max(0, Number.isFinite(form.stock) ? Number(form.stock) : 0)
+      ...form.value,
+      category: form.value.category.trim(),
+      costPrice: Math.max(0, Number.isFinite(form.value.costPrice) ? Number(form.value.costPrice) : 0),
+      salePrice: Math.max(0, Number.isFinite(form.value.salePrice) ? Number(form.value.salePrice) : 0),
+      lowStockThreshold: Math.max(1, Number.isFinite(form.value.lowStockThreshold) ? Number(form.value.lowStockThreshold) : 5),
+      stock: Math.max(0, Number.isFinite(form.value.stock) ? Number(form.value.stock) : 0)
     };
     await saveProduct(payload);
     await loadProducts();
@@ -946,12 +897,13 @@ async function handleSubmit() {
     resetForm();
   } catch (error) {
     console.error(error);
-    toast.push('Gagal menyimpan produk.', 'error');
+    const message = error instanceof Error ? error.message : 'Gagal menyimpan produk.';
+    toast.push(message, 'error');
   }
 }
 
 function editProduct(product: Product) {
-  Object.assign(form, {
+  Object.assign(form.value, {
     ...product,
     category: product.category || '',
     lowStockThreshold: product.lowStockThreshold && product.lowStockThreshold > 0 ? product.lowStockThreshold : 5,
@@ -962,19 +914,19 @@ function editProduct(product: Product) {
 }
 
 function clearProductImage() {
-  form.imageData = '';
-  form.imageMime = '';
-  form.imageUrl = '';
-  form.thumbUrl = '';
-  form.imagePath = '';
-  form.thumbPath = '';
-  form.imageHash = '';
-  form.imageWidth = 0;
-  form.imageHeight = 0;
-  form.imageSizeBytes = 0;
-  form.thumbWidth = 0;
-  form.thumbHeight = 0;
-  form.thumbSizeBytes = 0;
+  form.value.imageData = undefined;
+  form.value.imageMime = '';
+  form.value.imageUrl = '';
+  form.value.thumbUrl = '';
+  form.value.imagePath = '';
+  form.value.thumbPath = '';
+  form.value.imageHash = '';
+  form.value.imageWidth = 0;
+  form.value.imageHeight = 0;
+  form.value.imageSizeBytes = 0;
+  form.value.thumbWidth = 0;
+  form.value.thumbHeight = 0;
+  form.value.thumbSizeBytes = 0;
 }
 
 function handleProductImageChange(event: Event) {
@@ -987,12 +939,12 @@ function handleProductImageChange(event: Event) {
   reader.onload = () => {
     const result = reader.result as string;
     const base64 = result.includes(',') ? result.split(',')[1] : result;
-    form.imageData = base64;
-    form.imageMime = file.type || 'image/png';
-    form.imageUrl = '';
-    form.thumbUrl = '';
-    form.imagePath = '';
-    form.thumbPath = '';
+    form.value.imageData = base64;
+    form.value.imageMime = file.type || 'image/png';
+    form.value.imageUrl = '';
+    form.value.thumbUrl = '';
+    form.value.imagePath = '';
+    form.value.thumbPath = '';
   };
   reader.readAsDataURL(file);
   target.value = '';
@@ -1004,16 +956,17 @@ async function archiveProductAction(product: Product) {
     `Arsipkan ${product.name}? Produk yang diarsipkan tidak ditampilkan lagi tetapi histori order tetap aman.`
   );
   if (!confirmed) return;
-  try {
+  try { 
     await archiveProductApi(product.id);
-    if (form.id === product.id) {
+    if (form.value.id === product.id) {
       resetForm();
     }
     await loadProducts();
     toast.push(`${product.name} diarsipkan.`, 'success');
   } catch (error) {
     console.error(error);
-    toast.push('Gagal mengarsipkan produk.', 'error');
+    const message = error instanceof Error ? error.message : 'Gagal mengarsipkan produk.';
+    toast.push(message, 'error');
   }
 }
 
@@ -1027,7 +980,7 @@ async function deleteProductAction(product: Product) {
   }
   try {
     await deleteProductApi(product.id);
-    if (form.id === product.id) {
+    if (form.value.id === product.id) {
       resetForm();
     }
     if (productDetail.value?.id === product.id) {
@@ -1159,8 +1112,8 @@ function parsePriceInput(raw: string) {
 function onCostPriceInput(event: Event) {
   const target = event.target as HTMLInputElement;
   const { value, display } = parsePriceInput(target.value);
-  if (form.costPrice !== value) {
-    form.costPrice = value;
+  if (form.value.costPrice !== value) {
+    form.value.costPrice = value;
   }
   costPriceDisplay.value = display;
 }
@@ -1168,8 +1121,8 @@ function onCostPriceInput(event: Event) {
 function onSalePriceInput(event: Event) {
   const target = event.target as HTMLInputElement;
   const { value, display } = parsePriceInput(target.value);
-  if (form.salePrice !== value) {
-    form.salePrice = value;
+  if (form.value.salePrice !== value) {
+    form.value.salePrice = value;
   }
   salePriceDisplay.value = display;
 }

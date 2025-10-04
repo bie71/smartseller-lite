@@ -44,9 +44,9 @@ func (s *ProductService) upsert(ctx context.Context, existing *domain.Product, p
 	if strings.TrimSpace(p.Name) == "" {
 		return nil, errors.New("product name is required")
 	}
-	if strings.TrimSpace(p.SKU) == "" {
-		return nil, errors.New("product SKU is required")
-	}
+	// if strings.TrimSpace(p.SKU) == "" {
+	// 	return nil, errors.New("product SKU is required")
+	// }
 	p.Category = strings.TrimSpace(p.Category)
 	if p.LowStockThreshold <= 0 {
 		p.LowStockThreshold = 5

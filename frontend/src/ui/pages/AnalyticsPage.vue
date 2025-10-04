@@ -288,7 +288,7 @@ const topProducts = computed<ProductPerformance[]>(() => {
       }
       const entry = bucket.get(item.productId)!;
       entry.quantity += item.quantity;
-      entry.revenue += item.quantity * item.unitPrice - item.discount;
+      entry.revenue += item.quantity * item.unitPrice - item.discountItem;
       entry.profit += item.profit;
     });
   });

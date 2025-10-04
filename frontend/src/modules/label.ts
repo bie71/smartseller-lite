@@ -2,6 +2,13 @@ import { createApp, h } from 'vue';
 import LabelPreview from '../ui/components/LabelPreview.vue';
 import type { AppSettings } from './settings';
 
+export type LabelItem = {
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  discountItem: number;
+};
+
 export type LabelData = {
   id: string;
   senderName: string;
@@ -18,6 +25,7 @@ export type LabelData = {
   isCOD?: boolean;
   codAmount?: number;
   weight?: number; // in kg
+  items: LabelItem[];
 };
 
 const MM_PER_INCH = 25.4;

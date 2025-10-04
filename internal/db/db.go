@@ -83,7 +83,7 @@ func (s *Store) initSchema() error {
 		`CREATE TABLE IF NOT EXISTS products (
             id VARCHAR(36) NOT NULL PRIMARY KEY,
             name VARCHAR(255) NOT NULL,
-            sku VARCHAR(191) NOT NULL,
+            sku VARCHAR(191) NULL,
             cost_price DOUBLE NOT NULL DEFAULT 0,
             sale_price DOUBLE NOT NULL DEFAULT 0,
             stock INT NOT NULL DEFAULT 0,
@@ -102,7 +102,7 @@ func (s *Store) initSchema() error {
             deleted_at VARCHAR(64),
             created_at VARCHAR(64) NOT NULL,
             updated_at VARCHAR(64) NOT NULL,
-            UNIQUE KEY idx_products_sku (sku)
+            INDEX idx_products_name (name)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`,
 		`CREATE TABLE IF NOT EXISTS customers (
             id VARCHAR(36) NOT NULL PRIMARY KEY,
@@ -127,7 +127,7 @@ func (s *Store) initSchema() error {
             shipment_service VARCHAR(191),
             shipment_tracking VARCHAR(191),
             shipment_cost DOUBLE NOT NULL DEFAULT 0,
-            discount DOUBLE NOT NULL DEFAULT 0,
+            discount_order DOUBLE NOT NULL DEFAULT 0,
             total DOUBLE NOT NULL DEFAULT 0,
             profit DOUBLE NOT NULL DEFAULT 0,
             notes TEXT,
@@ -144,7 +144,7 @@ func (s *Store) initSchema() error {
             product_id VARCHAR(36) NOT NULL,
             quantity INT NOT NULL,
             unit_price DOUBLE NOT NULL,
-            discount DOUBLE NOT NULL DEFAULT 0,
+            discount_item DOUBLE NOT NULL DEFAULT 0,
             cost_price DOUBLE NOT NULL DEFAULT 0,
             profit DOUBLE NOT NULL DEFAULT 0,
             KEY idx_order_items_order (order_id),
@@ -229,6 +229,7 @@ func (s *Store) initSchema() error {
 		`ALTER TABLE couriers ADD COLUMN logo_size_bytes BIGINT;`,
 		`ALTER TABLE couriers ADD COLUMN logo_mime VARCHAR(64);`,
 		`ALTER TABLE stock_opnames ADD COLUMN performed_by VARCHAR(191);`,
+		`ALTER TABLE orders ADD COLUMN is_buyer_paying_shipping BOOLEAN NOT NULL DEFAULT FALSE;`,
 	}
 
 	for _, stmt := range migrations {

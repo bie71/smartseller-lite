@@ -6,19 +6,20 @@ export interface OrderItemInput {
   productId: string;
   quantity: number;
   unitPrice: number;
-  discount: number;
+  discountItem: number;
 }
 
 export interface CreateOrderPayload {
   buyerId: string;
   recipientId: string;
   items: OrderItemInput[];
-  discount: number;
+  discountOrder: number;
   notes: string;
   courier: string;
   serviceLevel: string;
   trackingCode: string;
   shippingCost: number;
+  isBuyerPayingShipping: boolean;
 }
 
 export interface OrderItem {
@@ -28,7 +29,7 @@ export interface OrderItem {
   sku: string;
   quantity: number;
   unitPrice: number;
-  discount: number;
+  discountItem: number;
   costPrice: number;
   profit: number;
 }
@@ -43,9 +44,10 @@ export interface Order {
     serviceLevel: string;
     trackingCode: string;
     shippingCost: number;
+    shippingByBuyer: boolean;
   };
   items: OrderItem[];
-  discount: number;
+  discountOrder: number;
   total: number;
   profit: number;
   notes: string;
@@ -65,9 +67,10 @@ type ApiOrder = {
     serviceLevel: string;
     trackingCode: string;
     shippingCost: number;
+    shippingByBuyer: boolean;
   };
   items: ApiOrderItem[];
-  discount: number;
+  discountOrder: number;
   total: number;
   profit: number;
   notes: string;
@@ -83,7 +86,7 @@ function adaptOrderItem(item: ApiOrderItem): OrderItem {
     sku: item.sku,
     quantity: item.quantity,
     unitPrice: item.unitPrice,
-    discount: item.discount,
+    discountItem: item.discountItem,
     costPrice: item.costPrice,
     profit: item.profit
   };
@@ -99,10 +102,11 @@ function adaptOrder(order: ApiOrder): Order {
       courier: order.shipment.courier,
       serviceLevel: order.shipment.serviceLevel,
       trackingCode: order.shipment.trackingCode,
-      shippingCost: order.shipment.shippingCost
+      shippingCost: order.shipment.shippingCost,
+      shippingByBuyer: order.shipment.shippingByBuyer
     },
     items: order.items.map(adaptOrderItem),
-    discount: order.discount,
+    discountOrder: order.discountOrder,
     total: order.total,
     profit: order.profit,
     notes: order.notes,
@@ -244,8 +248,9 @@ export interface UiFormState {
   courier: string;
   serviceLevel: string;
   trackingCode: string;
-  discount: number;
+  discountOrder: number;
   shippingCost: number;
+  isBuyerPayingShipping: boolean;
   notes: string;
   items: UiOrderItem[];
 }

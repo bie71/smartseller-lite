@@ -28,6 +28,7 @@
     <div class="flex justify-between items-start pb-2 border-b-2 border-black flex-shrink-0">
       <div class="flex-1">
         <p class="font-bold text-lg uppercase">{{ label.courier }}</p>
+        <p class="font-mono tracking-wider text-slate-800">{{ label.orderCode }}</p>
         <p class="text-slate-600">Berat: {{ label.weight }} kg</p>
       </div>
       <div class="text-right">
@@ -51,10 +52,6 @@
             <p class="font-bold">{{ label.senderName }}</p>
             <p class="break-words">{{ label.senderPhone }}</p>
           </div>
-          <div>
-            <p class="font-semibold text-slate-500">ID PESANAN:</p>
-            <p class="font-mono tracking-wider">{{ label.orderCode }}</p>
-          </div>
         </div>
         <div>
           <p class="font-semibold text-slate-500">PENERIMA:</p>
@@ -66,10 +63,13 @@
 
       <!-- Order Details -->
       <div class="py-2 space-y-2">
-       <div>
+        <div>
           <p class="font-semibold text-slate-500">BARANG:</p>
-          <p class="font-medium break-words">{{ label.notes }}</p>
-      </div>
+          <ul class="list-disc list-inside">
+            <li v-for="item in label.items" :key="item.productName">{{ item.quantity }}x {{ item.productName }}</li>
+          </ul>
+          <p v-if="label.notes" class="font-medium break-words mt-2">Catatan: {{ label.notes }}</p>
+        </div>
       </div>
     </div>
 

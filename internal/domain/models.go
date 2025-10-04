@@ -54,37 +54,38 @@ type Customer struct {
 
 // Order aggregates order items and shipment metadata.
 type Order struct {
-	ID          string      `json:"id"`
-	Code        string      `json:"code"`
-	BuyerID     string      `json:"buyerId"`
-	RecipientID string      `json:"recipientId"`
-	Shipment    Shipment    `json:"shipment"`
-	Items       []OrderItem `json:"items"`
-	Discount    float64     `json:"discount"`
-	Total       float64     `json:"total"`
-	Profit      float64     `json:"profit"`
-	Notes       string      `json:"notes"`
-	CreatedAt   time.Time   `json:"createdAt"`
-	UpdatedAt   time.Time   `json:"updatedAt"`
+	ID            string      `json:"id"`
+	Code          string      `json:"code"`
+	BuyerID       string      `json:"buyerId"`
+	RecipientID   string      `json:"recipientId"`
+	Shipment      Shipment    `json:"shipment"`
+	Items         []OrderItem `json:"items"`
+	DiscountOrder float64     `json:"discountOrder"`
+	Total         float64     `json:"total"`
+	Profit        float64     `json:"profit"`
+	Notes         string      `json:"notes"`
+	CreatedAt     time.Time   `json:"createdAt"`
+	UpdatedAt     time.Time   `json:"updatedAt"`
 }
 
 type OrderItem struct {
-	ID        string  `json:"id"`
-	OrderID   string  `json:"orderId"`
-	ProductID string  `json:"productId"`
-	SKU       string  `json:"sku"`
-	Quantity  int     `json:"quantity"`
-	UnitPrice float64 `json:"unitPrice"`
-	Discount  float64 `json:"discount"`
-	CostPrice float64 `json:"costPrice"`
-	Profit    float64 `json:"profit"`
+	ID           string  `json:"id"`
+	OrderID      string  `json:"orderId"`
+	ProductID    string  `json:"productId"`
+	SKU          string  `json:"sku"`
+	Quantity     int     `json:"quantity"`
+	UnitPrice    float64 `json:"unitPrice"`
+	DiscountItem float64 `json:"discountItem"`
+	CostPrice    float64 `json:"costPrice"`
+	Profit       float64 `json:"profit"`
 }
 
 type Shipment struct {
-	Courier      string  `json:"courier"`
-	TrackingCode string  `json:"trackingCode"`
-	ServiceLevel string  `json:"serviceLevel"`
-	ShippingCost float64 `json:"shippingCost"`
+	Courier         string  `json:"courier"`
+	TrackingCode    string  `json:"trackingCode"`
+	ServiceLevel    string  `json:"serviceLevel"`
+	ShippingCost    float64 `json:"shippingCost"`
+	ShippingByBuyer bool    `json:"shippingByBuyer"`
 }
 
 // LabelData is a flattened view to render PDF labels.

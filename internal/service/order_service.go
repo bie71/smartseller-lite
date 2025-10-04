@@ -15,31 +15,33 @@ import (
 
 	"github.com/jung-kurt/gofpdf"
 
-	_ "golang.org/x/image/webp"
 	_ "image/gif"
 	_ "image/jpeg"
+
+	_ "golang.org/x/image/webp"
 
 	"smartseller-lite-starter/internal/domain"
 	"smartseller-lite-starter/internal/repo"
 )
 
 type OrderItemInput struct {
-	ProductID string  `json:"productId"`
-	Quantity  int     `json:"quantity"`
-	UnitPrice float64 `json:"unitPrice"`
-	Discount  float64 `json:"discount"`
+	ProductID    string  `json:"productId"`
+	Quantity     int     `json:"quantity"`
+	UnitPrice    float64 `json:"unitPrice"`
+	DiscountItem float64 `json:"discountItem"`
 }
 
 type CreateOrderInput struct {
-	BuyerID      string           `json:"buyerId"`
-	RecipientID  string           `json:"recipientId"`
-	Items        []OrderItemInput `json:"items"`
-	Discount     float64          `json:"discount"`
-	Notes        string           `json:"notes"`
-	Courier      string           `json:"courier"`
-	ServiceLevel string           `json:"serviceLevel"`
-	TrackingCode string           `json:"trackingCode"`
-	ShippingCost float64          `json:"shippingCost"`
+	BuyerID               string           `json:"buyerId"`
+	RecipientID           string           `json:"recipientId"`
+	Items                 []OrderItemInput `json:"items"`
+	DiscountOrder         float64          `json:"discountOrder"`
+	Notes                 string           `json:"notes"`
+	Courier               string           `json:"courier"`
+	ServiceLevel          string           `json:"serviceLevel"`
+	TrackingCode          string           `json:"trackingCode"`
+	ShippingCost          float64          `json:"shippingCost"`
+	IsBuyerPayingShipping bool             `json:"isBuyerPayingShipping"`
 }
 
 // OrderService coordinates order lifecycle and profit calculation.
@@ -101,8 +103,8 @@ func (s *OrderService) Create(ctx context.Context, input CreateOrderInput) (*dom
 	if input.Courier == "" {
 		input.Courier = "JNE"
 	}
-	if input.Discount < 0 {
-		input.Discount = 0
+	if input.DiscountOrder < 0 {
+		input.DiscountOrder = 0
 	}
 	if input.ShippingCost < 0 {
 		input.ShippingCost = 0
@@ -126,7 +128,7 @@ func (s *OrderService) Create(ctx context.Context, input CreateOrderInput) (*dom
 			return nil, err
 		}
 		if prod.Stock < line.Quantity {
-			return nil, fmt.Errorf("insufficient stock for %s", prod.Name)
+			return nil, fmt.Errorf("stok kurang untuk produk %s", prod.Name)
 		}
 		unitPrice := line.UnitPrice
 		if unitPrice <= 0 {
@@ -135,7 +137,7 @@ func (s *OrderService) Create(ctx context.Context, input CreateOrderInput) (*dom
 		if unitPrice < 0 {
 			unitPrice = 0
 		}
-		itemDiscount := line.Discount
+		itemDiscount := line.DiscountItem
 		if itemDiscount < 0 {
 			itemDiscount = 0
 		}
@@ -150,34 +152,40 @@ func (s *OrderService) Create(ctx context.Context, input CreateOrderInput) (*dom
 		totalCost += cost
 
 		items = append(items, domain.OrderItem{
-			ProductID: prod.ID,
-			SKU:       prod.SKU,
-			Quantity:  line.Quantity,
-			UnitPrice: unitPrice,
-			Discount:  itemDiscount,
-			CostPrice: prod.CostPrice,
-			Profit:    lineProfit,
+			ProductID:    prod.ID,
+			SKU:          prod.SKU,
+			Quantity:     line.Quantity,
+			UnitPrice:    unitPrice,
+			DiscountItem: itemDiscount,
+			CostPrice:    prod.CostPrice,
+			Profit:       lineProfit,
 		})
 	}
 
-	profit := subtotal - input.Discount - totalCost - input.ShippingCost
+	var shippingCostToSubtract float64
+	if !input.IsBuyerPayingShipping {
+		shippingCostToSubtract = input.ShippingCost
+	}
+
+	profit := subtotal - input.DiscountOrder - totalCost - shippingCostToSubtract
 	if profit < 0 {
 		profit = 0
 	}
 
 	order := &domain.Order{
-		BuyerID:     input.BuyerID,
-		RecipientID: input.RecipientID,
-		Items:       items,
-		Discount:    input.Discount,
-		Notes:       input.Notes,
+		BuyerID:       input.BuyerID,
+		RecipientID:   input.RecipientID,
+		Items:         items,
+		DiscountOrder: input.DiscountOrder,
+		Notes:         input.Notes,
 		Shipment: domain.Shipment{
-			Courier:      input.Courier,
-			ServiceLevel: input.ServiceLevel,
-			TrackingCode: input.TrackingCode,
-			ShippingCost: input.ShippingCost,
+			Courier:         input.Courier,
+			ServiceLevel:    input.ServiceLevel,
+			TrackingCode:    input.TrackingCode,
+			ShippingCost:    input.ShippingCost,
+			ShippingByBuyer: input.IsBuyerPayingShipping,
 		},
-		Total:  subtotal - input.Discount + input.ShippingCost,
+		Total:  subtotal - input.DiscountOrder + input.ShippingCost,
 		Profit: profit,
 	}
 
@@ -249,7 +257,27 @@ func (s *OrderService) Delete(ctx context.Context, id string) error {
 	if id == "" {
 		return errors.New("order id required")
 	}
-	return s.repo.Delete(ctx, id)
+
+	order, err := s.repo.Get(ctx, id)
+	if err != nil {
+		return fmt.Errorf("get order for deletion: %w", err)
+	}
+
+	if err := s.repo.Delete(ctx, id); err != nil {
+		return err
+	}
+
+	// Restore stock after deleting order.
+	for _, item := range order.Items {
+		reason := fmt.Sprintf("order-deleted:%s", order.Code)
+		if err := s.products.AdjustStock(ctx, item.ProductID, item.Quantity, reason); err != nil {
+			// Log this error but don't fail the whole operation,
+			// as the primary goal (order deletion) is complete.
+			fmt.Printf("failed to restore stock for product %s: %v\n", item.ProductID, err)
+		}
+	}
+
+	return nil
 }
 
 func (s *OrderService) ReplaceAll(ctx context.Context, orders []domain.Order) error {
@@ -296,7 +324,7 @@ func (s *OrderService) GenerateLabelPDF(ctx context.Context, orderID string) ([]
 		brandName = "SmartSeller Lite"
 	}
 
-	pdf := gofpdf.New("P", "mm", "A6", "")
+	pdf := gofpdf.New("P", "mm", "A4", "")
 	pdf.SetMargins(12, 14, 12)
 	pdf.SetAutoPageBreak(true, 14)
 	pdf.AddPage()
