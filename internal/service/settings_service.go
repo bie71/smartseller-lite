@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/base64"
+	"log"
 	"net/http"
 	"strings"
 
@@ -45,6 +46,7 @@ func (s *SettingsService) Update(ctx context.Context, payload domain.AppSettings
 	payload.LogoData = strings.TrimSpace(payload.LogoData)
 	if payload.LogoData != "" && s.media != nil {
 		asset, err := s.media.SaveLogo(ctx, payload.LogoData)
+		log.Println(err)
 		if err != nil {
 			return nil, err
 		}

@@ -304,7 +304,7 @@ begin
 
   ShellExec('', ExpandConstant('{app}\{#AppExe}'), '', ExpandConstant('{app}'), SW_SHOWNORMAL, ewNoWait, ExecRes);
   ExecRes := RunAndWait('powershell.exe',
-    '-NoProfile -Command "for($i=0;$i -lt 40;$i++){try{$c=New-Object Net.Sockets.TcpClient;$c.Connect(''127.0.0.1'',8787);$c.Close();exit 0}catch{Start-Sleep -Milliseconds 500}} exit 1"',
+    '-NoProfile -Command "for($i=0;$i -lt 40;$i++){try{$c=New-Object Net.Sockets.TcpClient;$c.Connect(''127.0.0.1'',8787);$c.Close();exit 0}catch{Start-Sleep -Milliseconds 200}} exit 1"',
     True);
   if ExecRes = 0 then
     ShellExec('', 'http://127.0.0.1:8787', '', '', SW_SHOWNORMAL, ewNoWait, ExecRes);
